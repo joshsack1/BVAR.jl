@@ -1,0 +1,16 @@
+module BVAR
+
+# Define Dependencies
+using DataFrames
+using HypothesisTests
+using LinearAlgebra
+using Distributions
+using FixedEffectModels
+
+# Include the data testing functions that will actually be used
+include("data-testing.jl")
+
+export adf_tests,
+    johansen_trace_test
+
+end # module BVAR
