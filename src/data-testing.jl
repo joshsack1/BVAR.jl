@@ -30,12 +30,15 @@ on the endogenous variables in your dataframe, returning the trace statistics
 eigenvalues.
 """
 function johansen_trace_test(
-    df::DataFrame, end_vec::Vector{Symbol}, p::Int; include_constant=true
+    df::DataFrame,
+    end_vec::Vector{Symbol},
+    p::Int;
+    include_constant = true,
 )
     Y = get_endogenous(df, end_vec)
     T, n = size(Y)
     # Create lagged differences and levels
-    ΔY = diff(Y; dims=1)
+    ΔY = diff(Y; dims = 1)
     Y_lag = Y[p:(end - 1), :]
     # Lagged differences for the VAR Part
     ΔY_lags = zeros(T - p, n * (p - 1))
@@ -62,7 +65,7 @@ function johansen_trace_test(
     S11 = R1'R1 / (T - p)
     # Eigenvalues
     eigenvals = eigvals(inv(S11) * S01' * inv(S00) * S01)
-    eigenvals = sort(real(eigenvals; rev=true))
+    eigenvals = sort(real(eigenvals; rev = true))
     # Trace Statistics
     trace_stats = -T * cumsum(log.(1 .- eigenvals))
     return trace_stats, eigenvals
