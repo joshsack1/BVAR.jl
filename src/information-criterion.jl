@@ -6,6 +6,19 @@ struct VARresult{T<:Real}
     vars::Int
 end
 # Create a function to estimate the VAR results necessary for the information criterion to be calculated
+"""
+    generate_VARresult(
+        data::AbstractMatrix{T},
+        lags::Int,
+        has_constant::Bool=true,
+    ) where {T<:Real}
+
+This function will take in a matrix of the data (perhaps created with the `get_endogenous` function),
+the number of lags, and a boolean as to whether the data has a constant (defaulting to true),
+and use it to return an object of the type `VARresult`, which has only the information
+necessary to calculate the information criterion: the residual covariance matrix, the number of
+observations, the number of parameters, and the number of variables.
+"""
 function generate_VARresult(
     data::AbstractMatrix{T},
     lags::Int,
