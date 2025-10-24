@@ -7,6 +7,7 @@ using LinearAlgebra
 using Distributions
 using FixedEffectModels
 using Statistics
+using Parameters
 
 # Include the data testing functions that will actually be used
 include("data-testing.jl")
