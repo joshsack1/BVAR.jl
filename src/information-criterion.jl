@@ -1,14 +1,14 @@
 # Create a struct for a VAR result
 struct VARresult{T<:Real}
     Σ::AbstractMatrix{T}
-    obs::Int64
-    params::Int64
-    vars::Int64
+    obs::Int
+    params::Int
+    vars::Int
 end
 # Create a function to estimate the VAR results necessary for the information criterion to be calculated
 function generate_VARresult(
     data::AbstractMatrix{T},
-    lags::Int64,
+    lags::Int,
     has_constant::Bool = true,
 ) where {T<:Real}
     obs, vars = size(data)
@@ -20,7 +20,7 @@ function generate_VARresult(
     if has_constant
         push!(regressors, ones(T, effective_observations, 1))
     end
-    for lag in lags
+    for lag in 1:lags
         lagged_column = data[(lags + 1 - lag):(obs - lag), :]
         push!(regressors, lagged_column)
     end
@@ -30,7 +30,7 @@ function generate_VARresult(
     ε = current_period - predictions
     Σ = (ε' * ε) / effective_observations
     params = size(X, 2) * vars
-    return VARresult(Σ, obs, params, vars)
+    return VARresult(Σ, effective_observations, params, vars)
 end
 # Create functions for the information criterion
 """
@@ -66,7 +66,7 @@ end
 """
     hq(result::VARresult{T}) where T<: Real
 
-Computes the Hanna-Quinn Information Criterion Where
+Computes the Hannan-Quinn Information Criterion Where
 
 ``HQ = \\ln |\\Sigma| + \\frac{2k * \\ln(\\ln(T))}{T}``
 
