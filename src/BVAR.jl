@@ -8,6 +8,7 @@ using Distributions
 using FixedEffectModels
 using Statistics
 using Parameters
+using SpecialFunctions
 
 # Include the data testing functions that will actually be used
 include("data-testing.jl")
@@ -15,11 +16,20 @@ include("data-testing.jl")
 include("information-criterion.jl")
 # Include Frequentist VAR Estimation
 include("var-estimation.jl")
+# Include Bayesian VAR Priors
+include("priors/priors.jl")
 
 export adf_tests, johansen_trace_test
 
 export aic, bic, hq, fpe
 
 export estimate_var, VARestimate
+
+export build_prior,
+    MinnesotaPrior,
+    NormalWishartPrior,
+    IndependentNIWPrior,
+    AsymmetricConjugatePrior,
+    BaumeisterHamiltonPrior
 
 end # module BVAR

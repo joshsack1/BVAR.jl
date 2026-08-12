@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "6415afbad2e66251a9baa0ac68c2b71a026a15f1"
+project_hash = "a757dbeabaee2f14c427ba3cae563e2c73465599"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5970c86505ae9c07bf5bc521ef2bbbb3849e8b7b"
@@ -236,7 +236,7 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
 
 [[deps.BVAR]]
-deps = ["DataFrames", "Distributions", "Documenter", "FixedEffectModels", "HypothesisTests", "LinearAlgebra", "Parameters", "Random", "Statistics"]
+deps = ["DataFrames", "Distributions", "Documenter", "FixedEffectModels", "HypothesisTests", "LinearAlgebra", "Parameters", "Random", "SpecialFunctions", "Statistics", "Turing"]
 path = "."
 uuid = "41625412-354d-4823-8550-7966f37a0530"
 version = "0.1.0"
