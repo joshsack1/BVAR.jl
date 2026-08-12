@@ -58,7 +58,9 @@ This function will take in a matrix of the data (perhaps created with the `get_e
 the number of lags, and a boolean as to whether the data has a constant (defaulting to true),
 and use it to return an object of the type `VARresult`, which has only the information
 necessary to calculate the information criterion: the residual covariance matrix, the number of
-observations, the number of parameters, and the number of variables.
+observations, the number of parameters, and the number of variables. The residual covariance
+is checked for finiteness before the `VARresult` is built, so degenerate or non-finite data
+raise an error rather than silently producing `NaN` information criterion scores.
 """
 function generate_VARresult(
     data::AbstractMatrix{T},
@@ -67,6 +69,7 @@ function generate_VARresult(
 ) where {T<:Real}
     vars = size(data, 2)
     fit = ols_var(data, lags, has_constant)
+    @assert all(isfinite, fit.Σ) "Non-finite residual covariance: check the input data for missing, non-finite, or degenerate (e.g. collinear) values"
     params = size(fit.X, 2) * vars
     return VARresult(fit.Σ, fit.T_eff, params, vars)
 end

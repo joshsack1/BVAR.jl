@@ -90,7 +90,7 @@ function fit_var_ols(
     k = size(fit.X, 2)
     σ² = vec(sum(abs2, fit.ε; dims = 1)) / (fit.T_eff - k)
     se = sqrt.(diag(inv(XᵀX)) * σ²')
-    @assert all(isfinite, se) "Non-finite standard errors: the regressors are collinear"
+    @assert all(isfinite, se) "Non-finite standard errors: X'X is numerically near-singular (its inverse overflowed), or the data contain non-finite values"
     return VARestimate(
         fit.β_hat,
         fit.Σ,

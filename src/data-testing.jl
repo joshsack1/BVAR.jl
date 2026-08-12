@@ -7,7 +7,7 @@ The vector `end_vec` should be a vector of the column names of all of the
 endogenous variables.
 """
 function get_endogenous(df::DataFrame, end_vec::Vector{Symbol})
-    return reduce(hcat, [df[!, end_var] for end_var in end_vec])
+    return hcat([df[!, end_var] for end_var in end_vec]...)
 end
 
 """

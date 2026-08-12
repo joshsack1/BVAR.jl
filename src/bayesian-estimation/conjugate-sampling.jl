@@ -26,6 +26,7 @@ function sample_posterior(
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
+    kwargs...,
 )
     T = eltype(prior.β0)
     post = normal_wishart_posterior(prior, gram.XᵀX, gram.XᵀY, gram.YᵀY, obs)
@@ -72,6 +73,7 @@ function sample_posterior(
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
+    kwargs...,
 )
     T = eltype(prior.β0)
     k, n = size(prior.β0)
@@ -86,7 +88,7 @@ function sample_posterior(
             βd[:, i] = rand(rng, MvNormal(post.β̄[:, i], Ω̄[i]))
         end
         β[d] = βd
-        Σ[d] = Σ_fixed
+        Σ[d] = copy(Σ_fixed)
     end
     return BVARdraws(
         β,
@@ -181,6 +183,7 @@ function sample_posterior(
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
+    kwargs...,
 )
     β, Σ = equation_normal_gamma_draws(
         prior.β0,
@@ -224,6 +227,7 @@ function sample_posterior(
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
+    kwargs...,
 )
     β, Σ = equation_normal_gamma_draws(
         prior.m,

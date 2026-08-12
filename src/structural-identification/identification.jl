@@ -8,13 +8,14 @@
 
 Identifies structural shocks recursively (Cholesky/Sims 1980 short-run
 identification): for each reduced-form draw, the impact matrix is the lower
-Cholesky factor of `Σ`, ``P_d = \\text{chol}(\\Sigma_d)_L``, so the first
-shock has no contemporaneous effect on variables ``2,\\ldots,n``, the second
-no effect on ``3,\\ldots,n``, and so on (variable order = `draws.names`).
+Cholesky factor of `Σ`, ``P_d = \\text{chol}(\\Sigma_d)_L``, so variable 1 has
+no contemporaneous response to shocks ``2,\\ldots,n``, variable 2 no response
+to shocks ``3,\\ldots,n``, and so on (variable order = `draws.names`).
 Computes `impulse_responses` for every draw. Returns an `IRFdraws`.
 """
 function identify_short_run(draws::BVARdraws{T}; horizon::Int = 20) where {T<:Real}
     ndraws = length(draws.β)
+    @assert length(draws.β) == length(draws.Σ) "draws.β and draws.Σ must have the same length"
     H = Vector{Vector{Matrix{T}}}(undef, ndraws)
     for d in 1:ndraws
         Φ = lag_blocks(draws.β[d], draws.lags, draws.include_constant)
@@ -88,7 +89,9 @@ function identify_sign_restrictions(
 ) where {T<:Real}
     n = draws.vars
     @assert size(sign_pattern) == (n, n) "sign_pattern must be n×n"
+    @assert all(s -> s in (-1, 0, 1), sign_pattern) "sign_pattern entries must be -1, 0, or 1 (got a value outside that range)"
     ndraws = length(draws.β)
+    @assert length(draws.β) == length(draws.Σ) "draws.β and draws.Σ must have the same length"
     H = Vector{Vector{Matrix{T}}}(undef, ndraws)
     for d in 1:ndraws
         Φ = lag_blocks(draws.β[d], draws.lags, draws.include_constant)

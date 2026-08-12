@@ -26,7 +26,10 @@ forward — the univariate AR(`est.lags`) residual variances used as scale by
 the Minnesota and Baumeister-Hamilton families, and the sample means used to
 anchor the dummy-observation priors. The Gram blocks a conjugate update
 needs (`X'X`, already in `est`, plus `X'Y` and `Y'Y`) are recovered instead
-of re-derived, via `gram_blocks`.
+of re-derived, via `gram_blocks`. `df`/`end_vec` must therefore describe the
+same data `est` was fit on: `end_vec` must equal `est.names` in the same
+order and `df` must have the same number of rows, or the two sources of
+statistics would be silently mismatched.
 
 `family` selects one of five prior objects covering nine named prior
 families from the literature:
@@ -67,7 +70,8 @@ golden-section coordinate ascent (`optimize_hyperparameters`). Passing
 `NamedTuple` (whose expected keys match the corresponding `*_prior`
 function's keyword arguments — e.g. `(λ1, λ2, λ3, λ4)` for `:minnesota`, or
 `(λ0, λ1, λ3, κ0, random_walk)` for `:hamilton_baumeister`) uses those values
-directly instead.
+directly instead; `hyperparameters` may only be passed alongside
+`hyperparameter_method = :fixed`.
 """
 function build_prior(
     df::DataFrame,
@@ -92,9 +96,13 @@ function build_prior(
     @assert dummy_components ⊆
             (:minnesota, :sum_of_coefficients, :dummy_initial_obs, :long_run) "dummy_components must be a subset of (:minnesota, :sum_of_coefficients, :dummy_initial_obs, :long_run)"
     @assert hyperparameter_method == :marginal_likelihood || !isnothing(hyperparameters) "hyperparameter_method = :fixed requires an explicit `hyperparameters` NamedTuple"
+    @assert hyperparameter_method == :fixed || isnothing(hyperparameters) "hyperparameters is ignored unless hyperparameter_method = :fixed; pass hyperparameter_method = :fixed to use your explicit hyperparameters, or omit hyperparameters to use marginal-likelihood optimization"
 
     Y = get_endogenous(df, end_vec)
+    @assert all(y -> !ismissing(y) && isfinite(y), Y) "Endogenous data cannot contain missing or non-finite values"
     @unpack lags, names, include_constant = est
+    @assert end_vec == names "end_vec must match est.names — build_prior requires the same variables in the same order as the VARestimate est was built from"
+    @assert size(Y, 1) == est.obs + lags "df must be the same data (same number of rows) used to produce est: got $(size(Y, 1)) observations but est.obs + lags = $(est.obs + lags)"
 
     if hyperparameter_method == :fixed
         if family == :minnesota

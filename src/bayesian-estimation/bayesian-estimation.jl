@@ -15,7 +15,10 @@ include("independent-niw-gibbs.jl")
 
 Draws `ndraws` samples from the posterior implied by `prior` (the output of
 `build_prior`) and the data summarized by `est` (the output of
-`estimate_var`), returning a `BVARdraws`.
+`estimate_var`), returning a `BVARdraws`. `ndraws` must be positive, and
+`prior` and `est` must describe the same model: matching `lags`, `vars`, and
+`names` — the same variables in the same order, since a prior's per-equation
+hyperparameters are paired with `est`'s equations positionally.
 
 Four of the five families — `MinnesotaPrior`, `NormalWishartPrior`,
 `AsymmetricConjugatePrior`, `BaumeisterHamiltonPrior` — have closed-form
@@ -38,7 +41,8 @@ function sample_posterior(
     rng::Random.AbstractRNG = Random.default_rng(),
     kwargs...,
 )
-    @assert prior.lags == est.lags && prior.vars == est.vars "prior and est must come from the same model specification (matching lags/vars)"
+    @assert ndraws > 0 "ndraws must be positive"
+    @assert prior.lags == est.lags && prior.vars == est.vars && prior.names == est.names "prior and est must come from the same model specification (matching lags, vars, and names/order)"
     gram = gram_blocks(est)
     return sample_posterior(
         prior,

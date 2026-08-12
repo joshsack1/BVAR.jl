@@ -97,6 +97,11 @@ reference OLS routine the frequentist estimator uses) and returns the vector
 of residual variances ``\\hat\\sigma_j^2``. These, not the joint ``\\hat\\Sigma``
 in a `VARestimate`, are the scale used by the Minnesota and
 Baumeister-Hamilton priors.
+
+Because those priors divide by ``\\hat\\sigma_j^2``, every entry must come back
+strictly positive and finite; a constant, perfectly lag-collinear, or too-short
+series trips an assertion here rather than silently seeding the prior with
+`Inf`/`NaN`.
 """
 function ar_residual_variances(Y::AbstractMatrix{T}, lags::Int) where {T<:Real}
     n = size(Y, 2)
@@ -105,6 +110,7 @@ function ar_residual_variances(Y::AbstractMatrix{T}, lags::Int) where {T<:Real}
         fit = ols_var(reshape(Y[:, j], :, 1), lags, true)
         σ²[j] = fit.Σ[1, 1]
     end
+    @assert all(x -> x > 0 && isfinite(x), σ²) "Non-positive or non-finite univariate AR residual variance for at least one variable: the series may be constant, perfectly collinear with its own lags, or too short relative to lags. Minnesota- and Baumeister-Hamilton-style priors require a strictly positive residual-variance scale for every variable."
     return σ²
 end
 

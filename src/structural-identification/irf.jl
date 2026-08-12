@@ -15,11 +15,16 @@ by `VARestimate.β_hat`, `BVARdraws.β`, and structural `B`: constant, if
 present, then lag 1 of every variable, then lag 2, …) into the
 ``n\\times n`` lag matrices ``\\Phi_1,\\ldots,\\Phi_p`` of the column-vector
 convention ``Y_t = c + \\Phi_1 Y_{t-1} + \\cdots + \\Phi_p Y_{t-p} +
-\\varepsilon_t``. Returns a `Vector` of length `lags`.
+\\varepsilon_t``. Returns a `Vector` of length `lags`. Requires `lags > 0`
+and that `S` have exactly the row count the convention implies,
+`include_constant + lags * n`, so that a metadata/data mismatch errors here
+rather than silently slicing the wrong rows.
 """
 function lag_blocks(S::AbstractMatrix{T}, lags::Int, include_constant::Bool) where {T<:Real}
     n = size(S, 2)
     offset = include_constant ? 1 : 0
+    @assert lags > 0 "lags must be positive"
+    @assert size(S, 1) == offset + lags * n "S has $(size(S, 1)) rows, but lags=$lags, include_constant=$include_constant, and $n columns imply $(offset + lags * n) rows (constant row if present, then lags * n stacked lag-coefficient rows) — S's row count is inconsistent with the given lags/include_constant"
     return [Matrix{T}(S[(offset + (ℓ - 1) * n + 1):(offset + ℓ * n), :]') for ℓ in 1:lags]
 end
 

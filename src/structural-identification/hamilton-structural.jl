@@ -69,7 +69,10 @@ Builds a `HamiltonStructuralPrior` pairing the reduced-form per-equation
 ``B,D\\mid A`` prior `reduced_form` (from `baumeister_hamilton_prior`) with
 the structural prior `A_prior` on ``A`` (from `structural_prior`), computing
 ``\\hat S`` (`ar_residual_covariance`) from the same data `Y` and lag order
-`reduced_form.lags` used to build `reduced_form`.
+`reduced_form.lags` used to build `reduced_form`. Checks that the two priors
+name the same variables in the same order — otherwise ``A``'s rows would be
+silently paired with the wrong reduced-form equations — and that `Y` has one
+column per variable.
 """
 function hamilton_structural_prior(
     reduced_form::BaumeisterHamiltonPrior{T},
@@ -77,6 +80,8 @@ function hamilton_structural_prior(
     Y::AbstractMatrix{T},
 ) where {T<:Real}
     @assert reduced_form.vars == A_prior.vars "reduced_form and A_prior must have the same number of variables"
+    @assert reduced_form.names == A_prior.names "reduced_form and A_prior must describe the same variables in the same order"
+    @assert size(Y, 2) == reduced_form.vars "Y must have one column per variable in reduced_form (got $(size(Y, 2)) columns, expected $(reduced_form.vars))"
     Ŝ = ar_residual_covariance(Y, reduced_form.lags)
     return HamiltonStructuralPrior(reduced_form, A_prior, Ŝ)
 end
@@ -213,6 +218,8 @@ draws `ndraws * oversample` candidates (`draw_candidate`), then resamples
 ``1/\\sum_\\ell\\tilde w_\\ell^2`` — inspect it before trusting the draws; a
 small `ess` relative to `ndraws` signals importance-weight collapse (see
 `sample_structural`'s docstring for when to prefer `method = :mh` instead).
+Errors if *every* candidate is rejected (all weights ``-\\infty``), which
+would otherwise normalize to `NaN` weights and silently resample garbage.
 Internal; called by the public `sample_structural(prior, est; ...)` entry
 point.
 """
@@ -236,6 +243,7 @@ function sample_structural_sir(
     for c in 1:ncandidates
         As[c], Bs[c], ds[c], logw[c] = draw_candidate(prior, gram, Σ̂, obs, rng)
     end
+    @assert any(isfinite, logw) "sample_structural_sir: every one of the $ncandidates candidate draws violates the structural prior's restrictions (all importance weights are -Inf); the restrictions in prior.A_prior.restrictions may be jointly infeasible given the component priors, or oversample may need to be much larger"
     logw .-= maximum(logw)
     w = exp.(logw)
     w ./= sum(w)

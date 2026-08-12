@@ -66,7 +66,7 @@ function baumeister_hamilton_prior(
         random_walk && (mi[offset + i] = one(T))
         m[i] = mi
     end
-    M = fill(M_shared, n)
+    M = [copy(M_shared) for _ in 1:n]
     κ = fill(T(κ0), n)
     τ = κ .* σ_ar .^ 2
     return BaumeisterHamiltonPrior(m, M, κ, τ, lags, n, names, false)

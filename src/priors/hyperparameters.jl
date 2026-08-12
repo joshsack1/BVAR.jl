@@ -219,16 +219,19 @@ Hand-rolled golden-section search for the maximizer of a unimodal scalar
 function `f` on `[lo, hi]` (Press et al., *Numerical Recipes*). Returns
 `(x★, f(x★))`; used by `coordinate_ascent` to maximize the closed-form log
 marginal likelihoods above without adding a general-purpose optimization
-dependency.
+dependency. A `NaN` objective value is treated as ``-\\infty`` while
+comparing candidates, so the search moves away from degenerate points
+instead of silently drifting toward `hi`.
 """
 function golden_section_ascent(f, lo::Real, hi::Real; tol = 1e-4)
+    score(v) = isnan(v) ? -Inf : v
     φ = (sqrt(5) - 1) / 2
     a, b = float(lo), float(hi)
     c = b - φ * (b - a)
     d = a + φ * (b - a)
     fc, fd = f(c), f(d)
     while (b - a) > tol
-        if fc > fd
+        if score(fc) > score(fd)
             b, d, fd = d, c, fc
             c = b - φ * (b - a)
             fc = f(c)
@@ -296,6 +299,7 @@ function optimize_hyperparameters(
     dummy_components::Vector{Symbol} = Symbol[],
     H = nothing,
 )
+    @assert allunique(dummy_components) "dummy_components must not contain duplicates"
     if family == :minnesota
         bounds = [(0.01, 2.0), (0.01, 2.0), (0.1, 3.0)]
         build_minnesota(x) = minnesota_prior(
