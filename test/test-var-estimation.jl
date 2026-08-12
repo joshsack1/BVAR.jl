@@ -48,14 +48,38 @@ Y = simulate_var([Φ₁], c₁, 300)
 df = DataFrame(Y, [:y1, :y2])
 end_vec = [:y1, :y2]
 
-@testset "Agreement with the hand-rolled OLS" begin
+@testset "Agreement between the :ols and :fem methods" begin
     for lags in (1, 2, 3), include_constant in (true, false)
+        ols = estimate_var(
+            df,
+            end_vec,
+            lags;
+            include_constant = include_constant,
+            method = :ols,
+        )
+        fem = estimate_var(
+            df,
+            end_vec,
+            lags;
+            include_constant = include_constant,
+            method = :fem,
+        )
         ref = BVAR.ols_var(Y, lags, include_constant)
-        est = estimate_var(df, end_vec, lags; include_constant = include_constant)
-        @test est.β_hat ≈ ref.β_hat rtol = 1e-8
-        @test est.Σ ≈ ref.Σ rtol = 1e-8
-        @test est.XᵀX ≈ ref.X' * ref.X rtol = 1e-10
+        @test fem.β_hat ≈ ols.β_hat rtol = 1e-8
+        @test fem.Σ ≈ ols.Σ rtol = 1e-8
+        @test fem.se ≈ ols.se rtol = 1e-8
+        @test fem.XᵀX ≈ ols.XᵀX rtol = 1e-10
+        @test ols.β_hat ≈ ref.β_hat rtol = 1e-12
     end
+end
+
+@testset "Default method is :ols" begin
+    default = estimate_var(df, end_vec, 2)
+    ols = estimate_var(df, end_vec, 2; method = :ols)
+    @test default.β_hat == ols.β_hat
+    @test default.Σ == ols.Σ
+    @test default.se == ols.se
+    @test default.XᵀX == ols.XᵀX
 end
 
 @testset "Dimensions and metadata" begin
@@ -107,6 +131,7 @@ end
 end
 
 @testset "Errors and contract checks" begin
+    @test_throws AssertionError estimate_var(df, end_vec, 1; method = :bogus)
     @test_throws AssertionError estimate_var(df, end_vec, 0)
     @test_throws AssertionError estimate_var(df, end_vec, size(Y, 1))
     @test_throws AssertionError estimate_var(df, [:y1, :not_a_column], 1)

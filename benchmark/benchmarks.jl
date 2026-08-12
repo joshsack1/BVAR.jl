@@ -1,4 +1,4 @@
-# Speed comparison: the FixedEffectModels estimator vs the hand-rolled OLS.
+# Speed comparison: the default stacked OLS method vs the FixedEffectModels method.
 # Run with: julia --project=benchmark benchmark/benchmarks.jl
 using BenchmarkTools
 using BVAR
@@ -19,24 +19,24 @@ function simulate_data(T_obs, n; rng = Xoshiro(42))
     return Y
 end
 
-println("Benchmark: estimate_var (FixedEffectModels) vs BVAR.ols_var (hand-rolled)")
+println("Benchmark: estimate_var method = :ols (default) vs method = :fem")
 println("="^76)
 for (T_obs, n, p) in ((200, 3, 2), (1000, 6, 4))
     Y = simulate_data(T_obs, n)
     end_vec = Symbol.(:y, 1:n)
     df = DataFrame(Y, end_vec)
-    b_fem = @benchmark estimate_var($df, $end_vec, $p)
-    b_ols = @benchmark BVAR.ols_var($Y, $p, true)
-    t_fem = median(b_fem).time
+    b_ols = @benchmark estimate_var($df, $end_vec, $p; method = :ols)
+    b_fem = @benchmark estimate_var($df, $end_vec, $p; method = :fem)
     t_ols = median(b_ols).time
+    t_fem = median(b_fem).time
     println("T = $T_obs, n = $n, p = $p")
-    println("  estimate_var (FixedEffectModels): $(BenchmarkTools.prettytime(t_fem))")
-    println("  ols_var      (hand-rolled):       $(BenchmarkTools.prettytime(t_ols))")
-    println("  ratio (FEM / hand-rolled):        $(round(t_fem / t_ols; digits = 1))x")
+    println("  method = :ols (default): $(BenchmarkTools.prettytime(t_ols))")
+    println("  method = :fem:           $(BenchmarkTools.prettytime(t_fem))")
+    println("  ratio (:fem / :ols):     $(round(t_fem / t_ols; digits = 1))x")
     println()
 end
 println("""
-The hand-rolled OLS is expected to be faster: it is a single stacked linear
-solve, while estimate_var runs one full FixedEffectModels fit per equation.
-estimate_var is the production estimator because it also supplies the
-standard errors and diagnostics the prior-building stage consumes.""")
+The default :ols method solves all equations in one stacked least squares
+problem, while :fem runs one full FixedEffectModels fit per equation. The
+two agree to numerical precision; :fem remains available for
+FixedEffectModels' regression diagnostics.""")
