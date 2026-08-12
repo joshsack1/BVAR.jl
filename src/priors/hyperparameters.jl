@@ -44,18 +44,13 @@ function log_marginal_likelihood(
     YᵀY::AbstractMatrix,
     obs::Int,
 )
-    @unpack β0, Ω0, S0, ν0 = prior
+    @unpack Ω0, S0, ν0 = prior
     n = size(YᵀY, 1)
-    Ω0_inv = inv(Ω0)
-    P = Ω0_inv + XᵀX
-    Ω̄ = inv(P)
-    β̄ = Ω̄ * (Ω0_inv * β0 + XᵀY)
-    S̄ = S0 + YᵀY + β0' * Ω0_inv * β0 - β̄' * P * β̄
-    ν̄ = ν0 + obs
+    post = normal_wishart_posterior(prior, XᵀX, XᵀY, YᵀY, obs)
     return -(obs * n / 2) * log(π) +
-           (n / 2) * (logdet(Ω̄) - logdet(Ω0)) +
-           (ν0 / 2) * logdet(S0) - (ν̄ / 2) * logdet(S̄) + log_multivariate_gamma(n, ν̄ / 2) -
-           log_multivariate_gamma(n, ν0 / 2)
+           (n / 2) * (logdet(post.Ω̄) - logdet(Ω0)) +
+           (ν0 / 2) * logdet(S0) - (post.ν̄ / 2) * logdet(post.S̄) +
+           log_multivariate_gamma(n, post.ν̄ / 2) - log_multivariate_gamma(n, ν0 / 2)
 end
 
 """
@@ -140,14 +135,9 @@ function equation_log_marginal_likelihood(
     yᵀy::Real,
     obs::Int,
 )
-    M_inv = inv(M)
-    P = M_inv + XᵀX
-    M̄ = inv(P)
-    b̄ = M̄ * (M_inv * m + Xᵀy)
-    κ̄ = κ + obs / 2
-    τ̄ = τ + (yᵀy + m' * M_inv * m - b̄' * P * b̄) / 2
-    return -(obs / 2) * log(2π) + (logdet(M̄) - logdet(M)) / 2 + κ * log(τ) - κ̄ * log(τ̄) +
-           loggamma(κ̄) - loggamma(κ)
+    post = equation_normal_gamma_posterior(m, M, κ, τ, XᵀX, Xᵀy, yᵀy, obs)
+    return -(obs / 2) * log(2π) + (logdet(post.M̄) - logdet(M)) / 2 + κ * log(τ) -
+           post.κ̄ * log(post.τ̄) + loggamma(post.κ̄) - loggamma(κ)
 end
 
 """

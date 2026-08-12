@@ -142,7 +142,7 @@ end
 end
 
 @testset "Package QA (Aqua)" begin
-    # Turing is staged for the Bayesian stage, Documenter for docs,
-    # and Random is used by the example script and tests only
-    Aqua.test_all(BVAR; stale_deps = (ignore = [:Documenter, :Random, :Turing],))
+    # Documenter is staged for docs; Turing and Random are used by the
+    # Bayesian estimation stage (src/bayesian-estimation/)
+    Aqua.test_all(BVAR; stale_deps = (ignore = [:Documenter],))
 end
