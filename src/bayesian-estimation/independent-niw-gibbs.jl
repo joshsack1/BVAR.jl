@@ -92,7 +92,8 @@ end
     sample_posterior(
         prior::IndependentNIWPrior,
         gram::NamedTuple,
-        obs::Int;
+        obs::Int,
+        include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
         burn_in::Int = ndraws,
@@ -110,7 +111,8 @@ the public `sample_posterior(prior, est; ...)` entry point.
 function sample_posterior(
     prior::IndependentNIWPrior,
     gram::NamedTuple,
-    obs::Int;
+    obs::Int,
+    include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
     burn_in::Int = ndraws,
@@ -134,5 +136,13 @@ function sample_posterior(
         β[i] = Matrix{T}(reshape(β_chain[it, 1], k, n))
         Σ[i] = Matrix{T}(Σ_chain[it, 1])
     end
-    return BVARdraws(β, Σ, :independent_niw, prior.lags, prior.vars, prior.names)
+    return BVARdraws(
+        β,
+        Σ,
+        :independent_niw,
+        prior.lags,
+        prior.vars,
+        prior.names,
+        include_constant,
+    )
 end

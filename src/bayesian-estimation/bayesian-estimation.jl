@@ -40,5 +40,13 @@ function sample_posterior(
 )
     @assert prior.lags == est.lags && prior.vars == est.vars "prior and est must come from the same model specification (matching lags/vars)"
     gram = gram_blocks(est)
-    return sample_posterior(prior, gram, est.obs; ndraws = ndraws, rng = rng, kwargs...)
+    return sample_posterior(
+        prior,
+        gram,
+        est.obs,
+        est.include_constant;
+        ndraws = ndraws,
+        rng = rng,
+        kwargs...,
+    )
 end

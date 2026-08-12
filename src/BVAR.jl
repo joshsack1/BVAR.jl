@@ -22,6 +22,8 @@ include("var-estimation.jl")
 include("priors/priors.jl")
 # Include Bayesian VAR Estimation
 include("bayesian-estimation/bayesian-estimation.jl")
+# Include Structural Identification and Impulse Response Functions
+include("structural-identification/structural-identification.jl")
 
 export adf_tests, johansen_trace_test
 
@@ -37,5 +39,18 @@ export build_prior,
     BaumeisterHamiltonPrior
 
 export sample_posterior, BVARdraws
+
+export structural_prior,
+    StructuralPrior,
+    hamilton_structural_prior,
+    HamiltonStructuralPrior,
+    sample_structural,
+    StructuralDraws,
+    det_sign_restriction,
+    long_run_sign_restriction
+
+export identify_short_run, identify_sign_restrictions
+
+export impulse_response, IRFdraws, long_run_multiplier
 
 end # module BVAR

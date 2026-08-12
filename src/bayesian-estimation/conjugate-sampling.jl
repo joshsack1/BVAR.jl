@@ -7,7 +7,8 @@
     sample_posterior(
         prior::NormalWishartPrior,
         gram::NamedTuple,
-        obs::Int;
+        obs::Int,
+        include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
     )
@@ -21,7 +22,8 @@ needed — the posterior is exact. Internal; called by the public
 function sample_posterior(
     prior::NormalWishartPrior,
     gram::NamedTuple,
-    obs::Int;
+    obs::Int,
+    include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
 )
@@ -36,14 +38,23 @@ function sample_posterior(
         β[d] = Matrix{T}(rand(rng, MatrixNormal(post.β̄, Ω̄, Symmetric(Σd))))
         Σ[d] = Σd
     end
-    return BVARdraws(β, Σ, :normal_wishart, prior.lags, prior.vars, prior.names)
+    return BVARdraws(
+        β,
+        Σ,
+        :normal_wishart,
+        prior.lags,
+        prior.vars,
+        prior.names,
+        include_constant,
+    )
 end
 
 """
     sample_posterior(
         prior::MinnesotaPrior,
         gram::NamedTuple,
-        obs::Int;
+        obs::Int,
+        include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
     )
@@ -57,7 +68,8 @@ point.
 function sample_posterior(
     prior::MinnesotaPrior,
     gram::NamedTuple,
-    obs::Int;
+    obs::Int,
+    include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
 )
@@ -76,7 +88,15 @@ function sample_posterior(
         β[d] = βd
         Σ[d] = Σ_fixed
     end
-    return BVARdraws(β, Σ, :minnesota, prior.lags, prior.vars, prior.names)
+    return BVARdraws(
+        β,
+        Σ,
+        :minnesota,
+        prior.lags,
+        prior.vars,
+        prior.names,
+        include_constant,
+    )
 end
 
 """
@@ -144,7 +164,8 @@ end
     sample_posterior(
         prior::AsymmetricConjugatePrior,
         gram::NamedTuple,
-        obs::Int;
+        obs::Int,
+        include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
     )
@@ -156,7 +177,8 @@ public `sample_posterior(prior, est; ...)` entry point.
 function sample_posterior(
     prior::AsymmetricConjugatePrior,
     gram::NamedTuple,
-    obs::Int;
+    obs::Int,
+    include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
 )
@@ -170,14 +192,23 @@ function sample_posterior(
         ndraws,
         rng,
     )
-    return BVARdraws(β, Σ, :asymmetric_conjugate, prior.lags, prior.vars, prior.names)
+    return BVARdraws(
+        β,
+        Σ,
+        :asymmetric_conjugate,
+        prior.lags,
+        prior.vars,
+        prior.names,
+        include_constant,
+    )
 end
 
 """
     sample_posterior(
         prior::BaumeisterHamiltonPrior,
         gram::NamedTuple,
-        obs::Int;
+        obs::Int,
+        include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
     )
@@ -189,7 +220,8 @@ public `sample_posterior(prior, est; ...)` entry point.
 function sample_posterior(
     prior::BaumeisterHamiltonPrior,
     gram::NamedTuple,
-    obs::Int;
+    obs::Int,
+    include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
 )
@@ -203,5 +235,13 @@ function sample_posterior(
         ndraws,
         rng,
     )
-    return BVARdraws(β, Σ, :hamilton_baumeister, prior.lags, prior.vars, prior.names)
+    return BVARdraws(
+        β,
+        Σ,
+        :hamilton_baumeister,
+        prior.lags,
+        prior.vars,
+        prior.names,
+        include_constant,
+    )
 end

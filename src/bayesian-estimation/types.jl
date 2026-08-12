@@ -26,6 +26,9 @@ shape stays uniform across families.
   `:hamilton_baumeister`).
 - `lags::Int`, `vars::Int`, `names::Vector{Symbol}` — carried over from the
   `VARestimate`/prior the draws were sampled from.
+- `include_constant::Bool` — carried over from the `VARestimate`, so
+  downstream consumers (stage 7's `lag_blocks`) can locate lag blocks in `β`
+  without re-deriving it from `size(β, 1)`.
 """
 struct BVARdraws{T<:Real}
     β::Vector{Matrix{T}}
@@ -34,4 +37,5 @@ struct BVARdraws{T<:Real}
     lags::Int
     vars::Int
     names::Vector{Symbol}
+    include_constant::Bool
 end

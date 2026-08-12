@@ -109,6 +109,29 @@ function ar_residual_variances(Y::AbstractMatrix{T}, lags::Int) where {T<:Real}
 end
 
 """
+    ar_residual_covariance(Y::AbstractMatrix, lags::Int)
+
+Fits a univariate AR(`lags`) to each column of `Y` (via `ols_var`, the same
+reference OLS routine `ar_residual_variances` uses) and returns the
+``n\\times n`` sample covariance matrix ``\\hat S`` of the resulting residual
+series, ``\\hat S_{ij} = T_{\\text{eff}}^{-1}\\sum_t \\hat\\varepsilon_{it}
+\\hat\\varepsilon_{jt}``. Generalizes `ar_residual_variances` (which returns
+only ``\\hat S``'s diagonal) to the full matrix — needed as the scale
+``\\hat S`` of Baumeister & Hamilton (2019, AER)'s structural prior,
+``\\tau_i(A) = \\kappa_i\\,a_i'\\hat Sa_i`` (stage 7, `structural_prior`).
+"""
+function ar_residual_covariance(Y::AbstractMatrix{T}, lags::Int) where {T<:Real}
+    n = size(Y, 2)
+    T_eff = size(Y, 1) - lags
+    E = Matrix{T}(undef, T_eff, n)
+    for j in 1:n
+        fit = ols_var(reshape(Y[:, j], :, 1), lags, true)
+        E[:, j] = fit.ε
+    end
+    return (E' * E) / T_eff
+end
+
+"""
     dummy_gram(Yd::AbstractMatrix, Xd::AbstractMatrix)
 
 Converts a block of dummy observations `(Yd, Xd)` into the moments of a
