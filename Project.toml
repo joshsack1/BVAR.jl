@@ -13,8 +13,19 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "Aqua", "Random", "DataFrames"]
 
 [compat]
+Aqua = "0.8"
 DataFrames = "1.7.1"
 Distributions = "0.25.120"
 Documenter = "1.14.1"
@@ -24,4 +35,6 @@ LinearAlgebra = "1.11.0"
 Parameters = "0.12.3"
 Random = "1.11.0"
 Statistics = "1.11.1"
+Test = "1.11.0"
+Turing = "0.46.0"
 julia = "1.11"

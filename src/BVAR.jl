@@ -13,9 +13,13 @@ using Parameters
 include("data-testing.jl")
 # Include Information Criterion Testing
 include("information-criterion.jl")
+# Include Frequentist VAR Estimation
+include("var-estimation.jl")
 
 export adf_tests, johansen_trace_test
 
 export aic, bic, hq, fpe
+
+export estimate_var, VARestimate
 
 end # module BVAR

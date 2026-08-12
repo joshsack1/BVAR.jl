@@ -7,7 +7,7 @@ The vector `end_vec` should be a vector of the column names of all of the
 endogenous variables.
 """
 function get_endogenous(df::DataFrame, end_vec::Vector{Symbol})
-    return Matrix([df[!, end_var] for end_var in end_vec])
+    return reduce(hcat, [df[!, end_var] for end_var in end_vec])
 end
 
 """
@@ -65,7 +65,7 @@ function johansen_trace_test(
     S11 = R1'R1 / (T - p)
     # Eigenvalues
     eigenvals = eigvals(inv(S11) * S01' * inv(S00) * S01)
-    eigenvals = sort(real(eigenvals; rev = true))
+    eigenvals = sort(real.(eigenvals); rev = true)
     # Trace Statistics
     trace_stats = -T * cumsum(log.(1 .- eigenvals))
     return trace_stats, eigenvals

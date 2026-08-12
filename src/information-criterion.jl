@@ -5,6 +5,47 @@ struct VARresult{T<:Real}
     params::Int
     vars::Int
 end
+# Hand-rolled OLS fit of a VAR(p), the reference implementation for the estimation stage
+"""
+    ols_var(
+        data::AbstractMatrix{T},
+        lags::Int,
+        has_constant::Bool = true,
+    ) where {T<:Real}
+
+Reference OLS fit of a VAR(p) by stacked least squares:
+
+``\\hat{\\beta} = (X'X)^{-1} X'Y, \\quad \\hat{\\Sigma} = \\frac{\\varepsilon'\\varepsilon}{T}``
+
+Where the columns of X are ordered as the constant (if present), followed by
+lag 1 of every variable, then lag 2, and so on. Returns a named tuple
+`(β_hat, Σ, ε, X, T_eff)`. This is the internal reference implementation;
+the production estimator is `estimate_var`.
+"""
+function ols_var(
+    data::AbstractMatrix{T},
+    lags::Int,
+    has_constant::Bool = true,
+) where {T<:Real}
+    obs, vars = size(data)
+    @assert lags > 0 "Need a Positive Number of Lags"
+    @assert obs > lags "Cannot have more lags than obervations"
+    T_eff = obs - lags
+    current_period = data[(lags + 1):end, :]
+    regressors = Vector{Matrix{T}}()
+    if has_constant
+        push!(regressors, ones(T, T_eff, 1))
+    end
+    for lag in 1:lags
+        lagged_column = data[(lags + 1 - lag):(obs - lag), :]
+        push!(regressors, lagged_column)
+    end
+    X = reduce(hcat, regressors)
+    β_hat = (X' * X) \ (X' * current_period)
+    ε = current_period - X * β_hat
+    Σ = (ε' * ε) / T_eff
+    return (β_hat = β_hat, Σ = Σ, ε = ε, X = X, T_eff = T_eff)
+end
 # Create a function to estimate the VAR results necessary for the information criterion to be calculated
 """
     generate_VARresult(
@@ -24,26 +65,10 @@ function generate_VARresult(
     lags::Int,
     has_constant::Bool = true,
 ) where {T<:Real}
-    obs, vars = size(data)
-    @assert lags > 0 "Need a Positive Number of Lags"
-    @assert obs > lags "Cannot have more lags than obervations"
-    effective_observations = obs - lags
-    current_period = data[(lags + 1):end, :]
-    regressors = Vector{Matrix{T}}()
-    if has_constant
-        push!(regressors, ones(T, effective_observations, 1))
-    end
-    for lag in 1:lags
-        lagged_column = data[(lags + 1 - lag):(obs - lag), :]
-        push!(regressors, lagged_column)
-    end
-    X = reduce(hcat, regressors)
-    β_hat_matrix = (X' * X) \ (X' * current_period)
-    predictions = X * β_hat_matrix
-    ε = current_period - predictions
-    Σ = (ε' * ε) / effective_observations
-    params = size(X, 2) * vars
-    return VARresult(Σ, effective_observations, params, vars)
+    vars = size(data, 2)
+    fit = ols_var(data, lags, has_constant)
+    params = size(fit.X, 2) * vars
+    return VARresult(fit.Σ, fit.T_eff, params, vars)
 end
 # Create functions for the information criterion
 """
