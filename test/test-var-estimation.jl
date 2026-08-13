@@ -64,7 +64,7 @@ end_vec = [:y1, :y2]
             include_constant = include_constant,
             method = :fem,
         )
-        ref = BVAR.ols_var(Y, lags, include_constant)
+        ref = BayesianVectorAutoregressions.ols_var(Y, lags, include_constant)
         @test fem.β_hat ≈ ols.β_hat rtol = 1e-8
         @test fem.Σ ≈ ols.Σ rtol = 1e-8
         @test fem.se ≈ ols.se rtol = 1e-8
@@ -144,5 +144,5 @@ end
 @testset "Package QA (Aqua)" begin
     # Documenter is staged for docs; Turing and Random are used by the
     # Bayesian estimation stage (src/bayesian-estimation/)
-    Aqua.test_all(BVAR; stale_deps = (ignore = [:Documenter],))
+    Aqua.test_all(BayesianVectorAutoregressions; stale_deps = (ignore = [:Documenter],))
 end

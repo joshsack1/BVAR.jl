@@ -1,7 +1,7 @@
 # [Hyperparameters](@id api-hyperparameters)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Marginal-likelihood evaluation and the hand-rolled golden-section coordinate ascent used to tune
@@ -17,7 +17,7 @@ Pages = ["hyperparameters.md"]
 ```
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "priors/hyperparameters.jl",
 ]

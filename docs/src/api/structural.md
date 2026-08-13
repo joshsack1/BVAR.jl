@@ -1,7 +1,7 @@
 # [Structural Identification](@id api-structural)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Stage 5: Cholesky short-run identification, sign restrictions, and the general
@@ -14,7 +14,7 @@ Pages = ["structural.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "structural-identification/structural-identification.jl",
     "structural-identification/types.jl",
@@ -33,7 +33,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "structural-identification/structural-identification.jl",
     "structural-identification/types.jl",

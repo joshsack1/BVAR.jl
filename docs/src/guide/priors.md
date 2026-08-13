@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 # Priors
@@ -9,7 +9,7 @@ literature, returned as one of five concrete types.
 
 ```@setup priors
 include("plot-theme.jl")
-using BVAR, DataFrames, Random
+using BayesianVectorAutoregressions, DataFrames, Random
 Random.seed!(123)
 df = DataFrame(
     gdp = cumsum(0.5 .+ randn(150)),
@@ -110,7 +110,7 @@ blocks rather than the raw data — [`gram_blocks`](@ref) recovers ``X'Y`` and `
 ```@example priors
 using Plots
 
-gram = BVAR.gram_blocks(est)
+gram = BayesianVectorAutoregressions.gram_blocks(est)
 
 λ1s = 0.02:0.02:1.0
 lml = map(λ1s) do λ1
@@ -119,7 +119,7 @@ lml = map(λ1s) do λ1
         hyperparameter_method = :fixed,
         hyperparameters = (λ1 = λ1, λ2 = 0.5, λ3 = 1.0, λ4 = 1e5),
     )
-    BVAR.log_marginal_likelihood(p, gram.XᵀX, gram.XᵀY, gram.YᵀY, est.obs)
+    BayesianVectorAutoregressions.log_marginal_likelihood(p, gram.XᵀX, gram.XᵀY, gram.YᵀY, est.obs)
 end
 
 plot(
@@ -148,7 +148,7 @@ approaches OLS. The maximum is the data's answer to that trade-off.
 !!! note
     None of the five prior structs carries a docstring in `src/` yet, so they do not appear in
     the [API Reference](@ref api-priors). Their fields are documented here instead. All five
-    subtype the unexported `BVAR.AbstractVARPrior{T}`.
+    subtype the unexported `BayesianVectorAutoregressions.AbstractVARPrior{T}`.
 
 Fields shared by all five: `lags::Int`, `vars::Int`, `names::Vector{Symbol}`.
 

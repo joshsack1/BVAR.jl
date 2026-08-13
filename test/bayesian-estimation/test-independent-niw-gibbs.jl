@@ -12,7 +12,7 @@ niw_hp = (λ1 = 0.2, λ2 = 0.5, λ3 = 1.0, λ4 = 1e5)
         hyperparameters = niw_hp,
     )
     draws = sample_posterior(prior, est_p; ndraws = 15, burn_in = 15, rng = Xoshiro(1))
-    @test draws isa BVAR.BVARdraws
+    @test draws isa BayesianVectorAutoregressions.BVARdraws
     @test draws.family == :independent_niw
     @test length(draws.β) == 15
     @test length(draws.Σ) == 15

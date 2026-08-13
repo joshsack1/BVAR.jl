@@ -1,7 +1,7 @@
 # Speed comparison: the default stacked OLS method vs the FixedEffectModels method.
 # Run with: julia --project=benchmark benchmark/benchmarks.jl
 using BenchmarkTools
-using BVAR
+using BayesianVectorAutoregressions
 using DataFrames
 using Random
 

@@ -1,17 +1,17 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 # Structural Identification
 
 Stage 5. Reduced-form draws pin down ``\Sigma`` but not the structural shocks; identification is
-the extra assumption that separates them. `BVAR.jl` offers three routes, two of which act
+the extra assumption that separates them. `BayesianVectorAutoregressions.jl` offers three routes, two of which act
 directly on a `BVARdraws`, and one — the general Baumeister-Hamilton framework — which samples
 its own structural posterior.
 
 ```@setup struct
 include("plot-theme.jl")
-using BVAR, DataFrames, Distributions, LinearAlgebra, Random
+using BayesianVectorAutoregressions, DataFrames, Distributions, LinearAlgebra, Random
 Random.seed!(123)
 df = DataFrame(
     gdp = cumsum(0.5 .+ randn(150)),
@@ -20,7 +20,7 @@ df = DataFrame(
 )
 end_vars = [:gdp, :cpi, :ffr]
 est = estimate_var(df, end_vars, 2; include_constant = true, method = :ols)
-Y = BVAR.get_endogenous(df, end_vars)
+Y = BayesianVectorAutoregressions.get_endogenous(df, end_vars)
 prior_nw = build_prior(df, end_vars, est, :normal_wishart)
 draws_nw = sample_posterior(prior_nw, est; ndraws = 500)
 ```

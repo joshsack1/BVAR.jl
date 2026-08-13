@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 # Frequentist VAR Estimation
@@ -14,7 +14,7 @@ and returns a `VARestimate`, the object every Bayesian stage builds on.
 
 ```@setup var
 include("plot-theme.jl")
-using BVAR, DataFrames, Random
+using BayesianVectorAutoregressions, DataFrames, Random
 Random.seed!(123)
 df = DataFrame(
     gdp = cumsum(0.5 .+ randn(150)),
@@ -96,7 +96,7 @@ matrix into the ``\Phi_\ell`` matrices of the equation above and asserts that th
 consistent with `lags` and `include_constant`:
 
 ```@example var
-Φ = BVAR.lag_blocks(est.β_hat, est.lags, est.include_constant)
+Φ = BayesianVectorAutoregressions.lag_blocks(est.β_hat, est.lags, est.include_constant)
 length(Φ), size(Φ[1])
 ```
 
@@ -104,7 +104,7 @@ length(Φ), size(Φ[1])
 powers generate the impulse responses. Its eigenvalues are the usual stability check:
 
 ```@example var
-F = BVAR.companion_matrix(Φ)
+F = BayesianVectorAutoregressions.companion_matrix(Φ)
 using LinearAlgebra
 round(maximum(abs.(eigvals(F))), digits = 4)
 ```

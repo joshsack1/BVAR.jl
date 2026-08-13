@@ -34,7 +34,7 @@ include("priors/test-hamilton.jl")
             dummy_components = dummy_components,
             H = H,
         )
-        @test prior isa BVAR.AbstractVARPrior
+        @test prior isa BayesianVectorAutoregressions.AbstractVARPrior
         @test prior.lags == lags_p
         @test prior.vars == length(end_vec_p)
         @test prior.names == end_vec_p
@@ -105,11 +105,11 @@ end
 end
 
 @testset "Marginal-likelihood optimum is not dominated by a grid neighbor" begin
-    gram = BVAR.gram_blocks(est_p)
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     prior = build_prior(df_p, end_vec_p, est_p, :minnesota)
-    obj(λ1, λ2, λ3) = BVAR.log_marginal_likelihood(
-        BVAR.minnesota_prior(
+    obj(λ1, λ2, λ3) = BayesianVectorAutoregressions.log_marginal_likelihood(
+        BayesianVectorAutoregressions.minnesota_prior(
             Y_endog,
             lags_p,
             end_vec_p,

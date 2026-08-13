@@ -1,20 +1,20 @@
-# BVAR.jl
+# BayesianVectorAutoregressions.jl
 
-[![CI](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/joshsack1/BVAR.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/joshsack1/BVAR.jl)
-[![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://joshsack1.github.io/BVAR.jl/dev/)
-[![Documentation](https://github.com/joshsack1/BVAR.jl/actions/workflows/Documenter.yml/badge.svg)](https://github.com/joshsack1/BVAR.jl/actions/workflows/Documenter.yml)
+[![CI](https://github.com/joshsack1/BayesianVectorAutoregressions.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/joshsack1/BayesianVectorAutoregressions.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/joshsack1/BayesianVectorAutoregressions.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/joshsack1/BayesianVectorAutoregressions.jl)
+[![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/)
+[![Documentation](https://github.com/joshsack1/BayesianVectorAutoregressions.jl/actions/workflows/Documenter.yml/badge.svg)](https://github.com/joshsack1/BayesianVectorAutoregressions.jl/actions/workflows/Documenter.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 *Bayesian Vector Autoregressions in Julia*
 
-`BVAR.jl` provides an end-to-end framework for Vector Autoregressive (VAR) and Bayesian Vector Autoregressive (BVAR) modeling in Julia.
+`BayesianVectorAutoregressions.jl` provides an end-to-end framework for Vector Autoregressive (VAR) and Bayesian Vector Autoregressive (BVAR) modeling in Julia.
 Designed for econometricians and data scientists, the package enables users to bring a standard `DataFrame` and proceed sequentially through every stage of time-series modeling:
 
 > *On authorship: the code in this package was drafted by a language model from mathematical
 > specifications written by the author, then reviewed against them; the documentation was
 > almost entirely model-written. See [How this package was built](#how-this-package-was-built)
-> below, or the [fuller statement in the docs](https://joshsack1.github.io/BVAR.jl/dev/provenance/).*
+> below, or the [fuller statement in the docs](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/provenance/).*
 
 1. **Unit Root & Cointegration Testing** (ADF tests, Johansen trace test)
 2. **Lag Selection & Information Criteria** (AIC, BIC, HQ, FPE)
@@ -26,22 +26,24 @@ Designed for econometricians and data scientists, the package enables users to b
 
 ## Documentation
 
-- [**Documentation (dev)**](https://joshsack1.github.io/BVAR.jl/dev/) — the full manual and API
+- [**Documentation (dev)**](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/) — the full manual and API
   reference
-- [The five-stage pipeline](https://joshsack1.github.io/BVAR.jl/dev/#The-five-stage-pipeline) —
+- [The five-stage pipeline](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/#The-five-stage-pipeline) —
   what each stage hands to the next, and the cross-stage contracts. Worth reading first.
-- [Guide](https://joshsack1.github.io/BVAR.jl/dev/guide/pre-estimation/) — a worked, executed
+- [Guide](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/guide/pre-estimation/) — a worked, executed
   walkthrough of every stage
-- [API Reference](https://joshsack1.github.io/BVAR.jl/dev/api/data-testing/) — generated from the
+- [API Reference](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/api/data-testing/) — generated from the
   docstrings
 
 ## Installation
 
-`BVAR.jl` is not registered in the General registry, so install it by URL:
+Install from the General registry (or by URL while the registration is still in AutoMerge's
+waiting period):
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/joshsack1/BVAR.jl")
+Pkg.add("BayesianVectorAutoregressions")
+# or: Pkg.add(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
 ```
 
 Julia 1.12 or later is required.
@@ -50,10 +52,12 @@ Julia 1.12 or later is required.
 
 ## Quickstart
 
-Simulated macroeconomic data (`:gdp`, `:cpi`, `:ffr`) through the conjugate path:
+Simulated macroeconomic data (`:gdp`, `:cpi`, `:ffr`) through the conjugate path. The
+package name is long by design (registry naming rules); `import
+BayesianVectorAutoregressions as BVAR` gives a short alias for qualified calls.
 
 ```julia
-using BVAR
+using BayesianVectorAutoregressions
 using DataFrames
 using Random
 
@@ -70,9 +74,9 @@ adf_res = adf_tests(df, end_vars)
 trace_stats, eigenvals = johansen_trace_test(df, end_vars, 2)
 
 # Stage 2: lag selection. Note that these two helpers are not exported.
-Y = BVAR.get_endogenous(df, end_vars)
+Y = BayesianVectorAutoregressions.get_endogenous(df, end_vars)
 for p in 1:3
-    r = BVAR.generate_VARresult(Y, p)
+    r = BayesianVectorAutoregressions.generate_VARresult(Y, p)
     println("p=", p, "  AIC=", aic(r), "  BIC=", bic(r))
 end
 
@@ -89,18 +93,18 @@ irf_short = identify_short_run(draws_nw; horizon = 20)
 
 The remaining paths — the independent-NIW Gibbs sampler, sign restrictions, and the general
 Baumeister-Hamilton structural framework with short-run, sign and long-run restrictions — are
-covered in the [Guide](https://joshsack1.github.io/BVAR.jl/dev/guide/pre-estimation/), where
+covered in the [Guide](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/guide/pre-estimation/), where
 every example is executed as part of the documentation build.
 
 ---
 
-## Capability Comparison: `BVAR.jl` vs [`BayesianVARs.jl`](https://github.com/elenev/BayesianVARs.jl)
+## Capability Comparison: `BayesianVectorAutoregressions.jl` vs [`BayesianVARs.jl`](https://github.com/elenev/BayesianVARs.jl)
 
-`BVAR.jl` was evaluated head-to-head against `BayesianVARs.jl` across functionality, posterior precision, and benchmark execution speed. Both packages were run on identical simulated data with matched priors and draw counts; timings come from `BenchmarkTools` and the parity check compares posterior moments elementwise. The benchmark harness lives in `benchmark/` and is run with `julia --project=benchmark benchmark/benchmarks.jl`. A summary of the findings follows.
+`BayesianVectorAutoregressions.jl` was evaluated head-to-head against `BayesianVARs.jl` across functionality, posterior precision, and benchmark execution speed. Both packages were run on identical simulated data with matched priors and draw counts; timings come from `BenchmarkTools` and the parity check compares posterior moments elementwise. The benchmark harness lives in `benchmark/` and is run with `julia --project=benchmark benchmark/benchmarks.jl`. A summary of the findings follows.
 
 ### Capability Matrix
 
-| Feature / Capability | `BVAR.jl` | `BayesianVARs.jl` |
+| Feature / Capability | `BayesianVectorAutoregressions.jl` | `BayesianVARs.jl` |
 |:---|:---:|:---:|
 | **Pre-Estimation & Lag Selection** | | |
 | ADF Unit-Root Tests | ✓ (3 deterministic specs) | — |
@@ -130,17 +134,17 @@ every example is executed as part of the documentation build.
 
 ### Key Highlights
 
-1. **Broad Prior Ecosystem**: `BVAR.jl` supports 9 distinct prior specifications (including composable dummy observation priors, Chan's asymmetric conjugate prior, and Baumeister-Hamilton reference priors), compared to `BayesianVARs.jl`'s Minnesota-only scope.
+1. **Broad Prior Ecosystem**: `BayesianVectorAutoregressions.jl` supports 9 distinct prior specifications (including composable dummy observation priors, Chan's asymmetric conjugate prior, and Baumeister-Hamilton reference priors), compared to `BayesianVARs.jl`'s Minnesota-only scope.
 2. **Speed & Efficiency**:
-   - **Gibbs Sampler**: `BVAR.jl`'s Gibbs driver executes analytic conditional draws directly, achieving **3.0×–13× faster** runtime compared to `BayesianVARs.jl`'s data re-collapse loop.
+   - **Gibbs Sampler**: `BayesianVectorAutoregressions.jl`'s Gibbs driver executes analytic conditional draws directly, achieving **3.0×–13× faster** runtime compared to `BayesianVARs.jl`'s data re-collapse loop.
    - **IRF Transformation**: Computing IRFs over posterior draws is **2.1×–4.2× faster**.
-3. **Exact Posterior Parity**: Across all matched conjugate priors, `BVAR.jl` agrees with `BayesianVARs.jl` to machine precision ($\max |\Delta| \le 3.3 \times 10^{-10}$), confirming exact analytical equivalence.
+3. **Exact Posterior Parity**: Across all matched conjugate priors, `BayesianVectorAutoregressions.jl` agrees with `BayesianVARs.jl` to machine precision ($\max |\Delta| \le 3.3 \times 10^{-10}$), confirming exact analytical equivalence.
 
 ---
 
 ## How this package was built
 
-`BVAR.jl` was written with substantial help from a large language model. The Julia General
+`BayesianVectorAutoregressions.jl` was written with substantial help from a large language model. The Julia General
 registry does not require anyone to say so; this is here because econometric software fails
 quietly, and you should be able to calibrate how much to trust this package instead of
 guessing.
@@ -160,7 +164,7 @@ plausible, correctly typed, and wrong: a coefficient block sliced in the wrong o
 dropped normalization. The test suite targets that class of error directly, with
 hand-computed known-answer tests, reduction identities, cross-method agreement between the
 `:ols`/`:fem` estimators and the `:sir`/`:mh` samplers, and simulation-based coefficient
-recovery. It runs [on every push](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml)
+recovery. It runs [on every push](https://github.com/joshsack1/BayesianVectorAutoregressions.jl/actions/workflows/CI.yml)
 against both the declared Julia floor and latest stable, so the badge above is the evidence —
 you do not have to take the claim on faith.
 It has *not* been validated by replicating any cited paper's published results.
@@ -170,4 +174,4 @@ first, and check formulas against the papers the docstrings cite.
 However the code was drafted, the author is responsible for it, and intends to fix what
 turns out to be broken. Bug reports — including against the prose — are welcome and
 unusually valuable here. The full statement is
-[in the documentation](https://joshsack1.github.io/BVAR.jl/dev/provenance/).
+[in the documentation](https://joshsack1.github.io/BayesianVectorAutoregressions.jl/dev/provenance/).

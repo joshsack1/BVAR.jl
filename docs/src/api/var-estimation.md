@@ -1,7 +1,7 @@
 # [VAR Estimation](@id api-var-estimation)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Stage 3: reduced-form VAR estimation by stacked OLS or equation-by-equation
@@ -14,7 +14,7 @@ Pages = ["var-estimation.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "var-estimation.jl",
 ]
@@ -30,7 +30,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "var-estimation.jl",
 ]

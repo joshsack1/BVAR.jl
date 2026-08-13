@@ -1,7 +1,13 @@
 @testset "MinnesotaPrior: shapes and random-walk mean" begin
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     λ = (λ1 = 0.3, λ2 = 0.4, λ3 = 1.5, λ4 = 1e4)
-    prior = BVAR.minnesota_prior(Y_endog, lags_p, end_vec_p, true; λ = λ)
+    prior = BayesianVectorAutoregressions.minnesota_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = λ,
+    )
     n = length(end_vec_p)
     k = n * lags_p + 1
 
@@ -43,15 +49,27 @@
 end
 
 @testset "MinnesotaPrior: random_walk = false gives a zero prior mean" begin
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
-    prior = BVAR.minnesota_prior(Y_endog, lags_p, end_vec_p, true; random_walk = false)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = BayesianVectorAutoregressions.minnesota_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        random_walk = false,
+    )
     @test all(prior.β0 .== 0.0)
 end
 
 @testset "MinnesotaPrior via build_prior matches the direct call" begin
     hp = (λ1 = 0.25, λ2 = 0.6, λ3 = 1.2, λ4 = 1e5)
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
-    direct = BVAR.minnesota_prior(Y_endog, lags_p, end_vec_p, true; λ = hp)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    direct = BayesianVectorAutoregressions.minnesota_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = hp,
+    )
     via_build = build_prior(
         df_p,
         end_vec_p,

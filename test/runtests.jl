@@ -1,7 +1,7 @@
-using BVAR
+using BayesianVectorAutoregressions
 using Test
 
-@testset "BVAR.jl" begin
+@testset "BayesianVectorAutoregressions.jl" begin
     include("test-var-estimation.jl")
     include("test-priors.jl")
     include("test-bayesian-estimation.jl")
