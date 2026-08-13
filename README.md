@@ -1,5 +1,9 @@
 # BVAR.jl
 
+[![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://joshsack1.github.io/BVAR.jl/dev/)
+[![Documentation](https://github.com/joshsack1/BVAR.jl/actions/workflows/Documenter.yml/badge.svg)](https://github.com/joshsack1/BVAR.jl/actions/workflows/Documenter.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 *Bayesian Vector Autoregressions in Julia*
 
 `BVAR.jl` provides an end-to-end framework for Vector Autoregressive (VAR) and Bayesian Vector Autoregressive (BVAR) modeling in Julia.
@@ -13,118 +17,79 @@ Designed for econometricians and data scientists, the package enables users to b
 
 ---
 
-## Quickstart & Minimal Example
+## Documentation
 
-The following example demonstrates the complete workflow using simulated macroeconomic data (`:gdp`, `:cpi`, `:ffr`).
+- [**Documentation (dev)**](https://joshsack1.github.io/BVAR.jl/dev/) — the full manual and API
+  reference
+- [The five-stage pipeline](https://joshsack1.github.io/BVAR.jl/dev/#The-five-stage-pipeline) —
+  what each stage hands to the next, and the cross-stage contracts. Worth reading first.
+- [Guide](https://joshsack1.github.io/BVAR.jl/dev/guide/pre-estimation/) — a worked, executed
+  walkthrough of every stage
+- [API Reference](https://joshsack1.github.io/BVAR.jl/dev/api/data-testing/) — generated from the
+  docstrings
+
+## Installation
+
+`BVAR.jl` is not registered in the General registry, so install it by URL:
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/joshsack1/BVAR.jl")
+```
+
+Julia 1.11 or later is required.
+
+---
+
+## Quickstart
+
+Simulated macroeconomic data (`:gdp`, `:cpi`, `:ffr`) through the conjugate path:
 
 ```julia
 using BVAR
 using DataFrames
-using Distributions
-using LinearAlgebra
 using Random
 
-# -----------------------------------------------------------------------------
-# 1. Prepare Data
-# -----------------------------------------------------------------------------
 Random.seed!(123)
-n_obs = 150
 df = DataFrame(
-    gdp = cumsum(0.5 .+ randn(n_obs)),   # I(1) output
-    cpi = cumsum(0.2 .+ randn(n_obs)),   # I(1) price level
-    ffr = 2.0 .+ 0.5 .* randn(n_obs),   # Policy rate
+    gdp = cumsum(0.5 .+ randn(150)),   # I(1) output
+    cpi = cumsum(0.2 .+ randn(150)),   # I(1) price level
+    ffr = 2.0 .+ 0.5 .* randn(150),    # policy rate
 )
 end_vars = [:gdp, :cpi, :ffr]
 
-# -----------------------------------------------------------------------------
-# 2. Pre-Estimation: Unit Root & Cointegration Testing + Lag Selection
-# -----------------------------------------------------------------------------
-# Augmented Dickey-Fuller (ADF) tests (returns Type 1, 2, and 4 test objects)
+# Stage 1: unit-root and cointegration testing
 adf_res = adf_tests(df, end_vars)
-
-# Johansen Trace Test for Cointegration
 trace_stats, eigenvals = johansen_trace_test(df, end_vars, 2)
 
-# Information Criteria for Lag Selection
-Y = get_endogenous(df, end_vars)
-var_res_p1 = generate_VARresult(Y, 1)
-var_res_p2 = generate_VARresult(Y, 2)
+# Stage 2: lag selection. Note that these two helpers are not exported.
+Y = BVAR.get_endogenous(df, end_vars)
+for p in 1:3
+    r = BVAR.generate_VARresult(Y, p)
+    println("p=", p, "  AIC=", aic(r), "  BIC=", bic(r))
+end
 
-println("AIC (p=1): ", aic(var_res_p1), " | AIC (p=2): ", aic(var_res_p2))
-println("BIC (p=1): ", bic(var_res_p1), " | BIC (p=2): ", bic(var_res_p2))
-
-# -----------------------------------------------------------------------------
-# 3. Frequentist Reduced-Form VAR
-# -----------------------------------------------------------------------------
+# Stage 3: reduced-form VAR(2)
 est = estimate_var(df, end_vars, 2; include_constant = true, method = :ols)
 
-# -----------------------------------------------------------------------------
-# 4. Bayesian VAR Estimation
-# -----------------------------------------------------------------------------
-# Path A: Conjugate Normal-Wishart (Direct, i.i.d. draws from exact posterior)
+# Stage 4: conjugate Normal-Wishart prior, then i.i.d. draws from the exact posterior
 prior_nw = build_prior(df, end_vars, est, :normal_wishart)
 draws_nw = sample_posterior(prior_nw, est; ndraws = 1000)
 
-# Path B: Independent Normal-Inverse-Wishart (Sampled via Turing Gibbs sampler)
-prior_niw = build_prior(
-    df,
-    end_vars,
-    est,
-    :independent_niw;
-    hyperparameter_method = :fixed,
-    hyperparameters = (λ1 = 0.2, λ2 = 0.5, λ3 = 1.0, λ4 = 1e5),
-)
-draws_niw = sample_posterior(prior_niw, est; ndraws = 1000)
-
-# -----------------------------------------------------------------------------
-# 5. Impulse Response Functions & Structural Identification
-# -----------------------------------------------------------------------------
-
-# (a) Short-Run Recursive Identification (Cholesky / Sims 1980)
+# Stage 5: recursive (Cholesky) identification and impulse responses
 irf_short = identify_short_run(draws_nw; horizon = 20)
-
-# (b) Sign Restrictions Identification (Uhlig 2005 / RWZ 2010)
-# Example pattern: shock 1 has positive contemporaneous impact on gdp and cpi
-sign_pattern = [
-     1  0  0;  # gdp response to shock 1 > 0
-     1  0  0;  # cpi response to shock 1 > 0
-     0  0  0   # ffr response unrestricted
-]
-irf_sign = identify_sign_restrictions(draws_nw, sign_pattern; horizon = 20)
-
-# (c) General Baumeister-Hamilton Structural Identification (Short-Run, Sign & Long-Run)
-rf_prior = build_prior(df, end_vars, est, :hamilton_baumeister)
-
-n = length(end_vars)
-template = Matrix(1.0I, n, n)
-free = falses(n, n)
-free[2, 1] = true  # Allow cpi to respond contemporaneously to gdp shock
-
-# Component prior with sign/bound restriction on A[2,1]
-component = Dict((2, 1) => Truncated(Normal(0.0, 1.0), -2.0, 0.0))
-
-# Long-run sign restriction: cumulative long-run effect of shock 1 on gdp is positive
-lr_restriction = long_run_sign_restriction(1, 1, 1, est.lags, est.include_constant)
-
-A_prior = structural_prior(
-    template,
-    free,
-    component;
-    restrictions = Function[lr_restriction],
-    names = end_vars,
-)
-struct_prior = hamilton_structural_prior(rf_prior, A_prior, Y)
-
-# Sample structural posterior (A, B, D) via Metropolis-Hastings or SIR
-s_draws, diagnostics = sample_structural(struct_prior, est; ndraws = 1000, method = :mh)
-irf_struct = impulse_response(s_draws; horizon = 20)
 ```
+
+The remaining paths — the independent-NIW Gibbs sampler, sign restrictions, and the general
+Baumeister-Hamilton structural framework with short-run, sign and long-run restrictions — are
+covered in the [Guide](https://joshsack1.github.io/BVAR.jl/dev/guide/pre-estimation/), where
+every example is executed as part of the documentation build.
 
 ---
 
 ## Capability Comparison: `BVAR.jl` vs [`BayesianVARs.jl`](https://github.com/elenev/BayesianVARs.jl)
 
-`BVAR.jl` was evaluated head-to-head against `BayesianVARs.jl` across functionality, posterior precision, and benchmark execution speed. Below is a summary of the findings (for full benchmark details, see `BVAR-Pkg-Comparison-2026-08-13.qmd`).
+`BVAR.jl` was evaluated head-to-head against `BayesianVARs.jl` across functionality, posterior precision, and benchmark execution speed. Both packages were run on identical simulated data with matched priors and draw counts; timings come from `BenchmarkTools` and the parity check compares posterior moments elementwise. The benchmark harness lives in `benchmark/` and is run with `julia --project=benchmark benchmark/benchmarks.jl`. A summary of the findings follows.
 
 ### Capability Matrix
 
