@@ -1,7 +1,7 @@
 # [Data Testing](@id api-data-testing)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Stage 1: unit-root and cointegration testing, plus the bridge from a `DataFrame`
@@ -14,7 +14,7 @@ Pages = ["data-testing.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "data-testing.jl",
 ]
@@ -30,7 +30,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "data-testing.jl",
 ]

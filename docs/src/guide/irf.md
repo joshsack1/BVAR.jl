@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 # Impulse Responses and Long-Run Multipliers
@@ -9,7 +9,7 @@ page applies regardless of how the shocks were identified.
 
 ```@setup irf
 include("plot-theme.jl")
-using BVAR, DataFrames, LinearAlgebra, Random, Statistics
+using BayesianVectorAutoregressions, DataFrames, LinearAlgebra, Random, Statistics
 Random.seed!(123)
 df = DataFrame(
     gdp = cumsum(0.5 .+ randn(150)),

@@ -1,19 +1,24 @@
 using Documenter
-using BVAR
+using BayesianVectorAutoregressions
 
 # GR must render headless, both in CI and for a local build.
 ENV["GKSwstype"] = "100"
 
 # No jldoctest blocks exist in src/ today; this makes any future one get
-# `using BVAR` for free.
-DocMeta.setdocmeta!(BVAR, :DocTestSetup, :(using BVAR); recursive = true)
+# `using BayesianVectorAutoregressions` for free.
+DocMeta.setdocmeta!(
+    BayesianVectorAutoregressions,
+    :DocTestSetup,
+    :(using BayesianVectorAutoregressions);
+    recursive = true,
+)
 
 makedocs(;
-    sitename = "BVAR.jl",
-    modules = [BVAR],
+    sitename = "BayesianVectorAutoregressions.jl",
+    modules = [BayesianVectorAutoregressions],
     authors = "Joshua Sack <jsack@joshsack.com>",
     format = Documenter.HTML(;
-        canonical = "https://joshsack1.github.io/BVAR.jl",
+        canonical = "https://joshsack1.github.io/BayesianVectorAutoregressions.jl",
         edit_link = "main",
         prettyurls = get(ENV, "CI", "false") == "true",
         assets = String[],
@@ -59,7 +64,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo = "github.com/joshsack1/BVAR.jl",
+    repo = "github.com/joshsack1/BayesianVectorAutoregressions.jl",
     devbranch = "main",
     push_preview = false,
 )

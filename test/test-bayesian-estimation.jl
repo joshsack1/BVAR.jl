@@ -20,7 +20,7 @@ include("bayesian-estimation/test-independent-niw-gibbs.jl")
             hyperparameters = hyperparameters,
         )
         draws = sample_posterior(prior, est_p; ndraws = 10, rng = Xoshiro(1))
-        @test draws isa BVAR.BVARdraws
+        @test draws isa BayesianVectorAutoregressions.BVARdraws
         @test draws.family == family
         @test length(draws.β) == 10
         @test length(draws.Σ) == 10

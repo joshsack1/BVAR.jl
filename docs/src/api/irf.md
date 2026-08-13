@@ -1,7 +1,7 @@
 # [Impulse Responses](@id api-irf)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 The impulse-response machinery shared by both identification paths: the
@@ -14,7 +14,7 @@ Pages = ["irf.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "structural-identification/irf.jl",
 ]
@@ -30,7 +30,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "structural-identification/irf.jl",
 ]

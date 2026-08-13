@@ -1,7 +1,7 @@
 using Pkg
 Pkg.activate(".")
 #%%
-using BVAR
+using BayesianVectorAutoregressions
 using DataFrames
 using Random
 #%%
@@ -19,17 +19,17 @@ end_vars = [:y1, :y2, :y3]
 #%%
 println("Testing ADF Tests:")
 println("==================")
-adf_results = adf_tests(df, end_vars)
+adf_results = adf_tests(df, end_vars)#=for (i, var) in enumerate(end_vars)=##=    println("Variable: $var")=##=    for (j, test) in enumerate(adf_results[i])=##=        test_types = ["No intercept/trend", "Constant", "Constant + trend"]=##=        println("  $(test_types[j]): p-value = $(pvalue(test))")=##=    end=##=    println()=##=end=#
 #%%
 # This needs to be corrected
-#=for (i, var) in enumerate(end_vars)=#
-#=    println("Variable: $var")=#
-#=    for (j, test) in enumerate(adf_results[i])=#
-#=        test_types = ["No intercept/trend", "Constant", "Constant + trend"]=#
-#=        println("  $(test_types[j]): p-value = $(pvalue(test))")=#
-#=    end=#
-#=    println()=#
-#=end=#
+
+
+
+
+
+
+
+
 
 println("Testing Johansen Trace Test:")
 println("============================")

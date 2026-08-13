@@ -1,7 +1,7 @@
 # [Priors](@id api-priors)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Stage 4a: the nine prior families, the composable dummy-observation priors, and
@@ -14,7 +14,7 @@ Pages = ["priors.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "priors/priors.jl",
     "priors/types.jl",
@@ -35,7 +35,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "priors/priors.jl",
     "priors/types.jl",

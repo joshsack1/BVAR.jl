@@ -1,7 +1,7 @@
 # [Lag Selection](@id api-lag-selection)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Stage 2: the four information criteria used to pick the lag order `p`, and the
@@ -14,7 +14,7 @@ Pages = ["lag-selection.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "information-criterion.jl",
 ]
@@ -30,7 +30,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "information-criterion.jl",
 ]

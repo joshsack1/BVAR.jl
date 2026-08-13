@@ -1,5 +1,5 @@
 @testset "random_orthogonal returns an orthogonal matrix" begin
-    Q = BVAR.random_orthogonal(3, Xoshiro(1), Float64)
+    Q = BayesianVectorAutoregressions.random_orthogonal(3, Xoshiro(1), Float64)
     @test Q' * Q ≈ I(3) atol = 1e-10
 end
 
@@ -7,7 +7,7 @@ end
     prior = build_prior(df_p, end_vec_p, est_p, :normal_wishart)
     draws = sample_posterior(prior, est_p; ndraws = 20, rng = Xoshiro(2))
     irf = identify_short_run(draws; horizon = 5)
-    @test irf isa BVAR.IRFdraws
+    @test irf isa BayesianVectorAutoregressions.IRFdraws
     @test irf.method == :cholesky
     @test length(irf.H) == 20
     for d in 1:20

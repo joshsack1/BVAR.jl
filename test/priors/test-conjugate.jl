@@ -1,10 +1,16 @@
 @testset "normal_wishart_prior (direct): shapes and Kadiyala-Karlsson moments" begin
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     n = length(end_vec_p)
     k = n * lags_p + 1
     λ = (λ1 = 0.3, λ3 = 1.1, λ4 = 1e4, λ_soc = 1.0, λ_dio = 1.0, λ_lr = 1.0)
-    prior = BVAR.normal_wishart_prior(Y_endog, lags_p, end_vec_p, true; λ = λ)
-    σ_ar = sqrt.(BVAR.ar_residual_variances(Y_endog, lags_p))
+    prior = BayesianVectorAutoregressions.normal_wishart_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = λ,
+    )
+    σ_ar = sqrt.(BayesianVectorAutoregressions.ar_residual_variances(Y_endog, lags_p))
 
     @test prior isa NormalWishartPrior
     @test size(prior.β0) == (k, n)
@@ -28,9 +34,9 @@ end
 
 @testset "normal_wishart_prior (dummy route) via build_prior matches the direct call" begin
     hp = (λ1 = 0.2, λ3 = 1.0, λ4 = 1e5, λ_soc = 1.0, λ_dio = 1.0, λ_lr = 1.0)
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     dummy_components = [:minnesota, :sum_of_coefficients, :dummy_initial_obs]
-    direct = BVAR.normal_wishart_prior(
+    direct = BayesianVectorAutoregressions.normal_wishart_prior(
         Y_endog,
         lags_p,
         end_vec_p,
@@ -53,11 +59,23 @@ end
 end
 
 @testset "IndependentNIWPrior reuses the per-equation Minnesota moments" begin
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     n = length(end_vec_p)
     λ = (λ1 = 0.25, λ2 = 0.4, λ3 = 1.3, λ4 = 1e4)
-    prior = BVAR.independent_niw_prior(Y_endog, lags_p, end_vec_p, true; λ = λ)
-    minn = BVAR.minnesota_prior(Y_endog, lags_p, end_vec_p, true; λ = λ)
+    prior = BayesianVectorAutoregressions.independent_niw_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = λ,
+    )
+    minn = BayesianVectorAutoregressions.minnesota_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = λ,
+    )
     k = n * lags_p + 1
 
     @test length(prior.β0) == k * n
@@ -69,13 +87,25 @@ end
 end
 
 @testset "AsymmetricConjugatePrior: per-equation Normal-Gamma structure" begin
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     n = length(end_vec_p)
     κ0 = 4.0
     λ = (λ1 = 0.25, λ2 = 0.4, λ3 = 1.3, λ4 = 1e4)
-    prior =
-        BVAR.asymmetric_conjugate_prior(Y_endog, lags_p, end_vec_p, true; λ = λ, κ0 = κ0)
-    minn = BVAR.minnesota_prior(Y_endog, lags_p, end_vec_p, true; λ = λ)
+    prior = BayesianVectorAutoregressions.asymmetric_conjugate_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = λ,
+        κ0 = κ0,
+    )
+    minn = BayesianVectorAutoregressions.minnesota_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        λ = λ,
+    )
 
     @test length(prior.β0) == n
     @test length(prior.Ω0) == n

@@ -38,7 +38,7 @@ jobs:
       - uses: julia-actions/cache@v2
 
       # No Pkg.develop step: docs/Project.toml declares
-      # [sources] BVAR = { path = ".." }, so instantiate resolves the parent
+      # [sources] BayesianVectorAutoregressions = { path = ".." }, so instantiate resolves the parent
       # package straight from the checkout. This is the same command a local
       # build runs.
       - name: Instantiate docs environment

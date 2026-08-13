@@ -1,9 +1,9 @@
 @testset "BaumeisterHamiltonPrior: reduced-form independent Normal-Gamma structure" begin
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     n = length(end_vec_p)
     k = n * lags_p + 1
     λ0, λ1, λ3, κ0 = 0.4, 0.8, 50.0, 3.0
-    prior = BVAR.baumeister_hamilton_prior(
+    prior = BayesianVectorAutoregressions.baumeister_hamilton_prior(
         Y_endog,
         lags_p,
         end_vec_p,
@@ -13,7 +13,7 @@
         λ3 = λ3,
         κ0 = κ0,
     )
-    σ_ar = sqrt.(BVAR.ar_residual_variances(Y_endog, lags_p))
+    σ_ar = sqrt.(BayesianVectorAutoregressions.ar_residual_variances(Y_endog, lags_p))
 
     @test prior isa BaumeisterHamiltonPrior
     @test !prior.structural
@@ -45,8 +45,14 @@ end
 
 @testset "BaumeisterHamiltonPrior via build_prior matches the direct call" begin
     hp = (λ0 = 0.6, λ1 = 1.2, λ3 = 80.0, κ0 = 2.5, random_walk = true)
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
-    direct = BVAR.baumeister_hamilton_prior(Y_endog, lags_p, end_vec_p, true; hp...)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    direct = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog,
+        lags_p,
+        end_vec_p,
+        true;
+        hp...,
+    )
     via_build = build_prior(
         df_p,
         end_vec_p,

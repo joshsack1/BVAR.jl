@@ -1,7 +1,7 @@
 # [Posterior Sampling](@id api-bayesian-estimation)
 
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 Stage 4b: `sample_posterior` and its six methods — closed-form i.i.d. draws for
@@ -14,7 +14,7 @@ Pages = ["bayesian-estimation.md"]
 ## Public API
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "bayesian-estimation/bayesian-estimation.jl",
     "bayesian-estimation/types.jl",
@@ -33,7 +33,7 @@ name, and because the closed-form updates and sampler internals are where the
 numerical substance of this package lives.
 
 ```@autodocs
-Modules = [BVAR]
+Modules = [BayesianVectorAutoregressions]
 Pages = [
     "bayesian-estimation/bayesian-estimation.jl",
     "bayesian-estimation/types.jl",

@@ -5,7 +5,7 @@
     free = falses(n, n)
     component = Dict{Tuple{Int,Int},UnivariateDistribution}()
     A_prior = structural_prior(template, free, component; names = end_vec_p)
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
     @test prior isa HamiltonStructuralPrior
 
@@ -15,10 +15,10 @@
     @test all(A == template for A in draws.A)
     @test diagnostics.acceptance_rate == 1.0  # nothing free to reject: every candidate A is the same template
 
-    gram = BVAR.gram_blocks(est_p)
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
     mean_B = sum(draws.B) / length(draws.B)
     for i in 1:n
-        post = BVAR.equation_normal_gamma_posterior(
+        post = BayesianVectorAutoregressions.equation_normal_gamma_posterior(
             reduced_form.m[i],
             reduced_form.M[i],
             reduced_form.κ[i],
@@ -40,7 +40,7 @@ end
     free[2, 1] = true
     component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
     A_prior = structural_prior(template, free, component; names = end_vec_p)
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
     prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
 
     draws_mh, diag_mh =
@@ -69,7 +69,7 @@ end
     free = falses(n, n)
     free[2, 1] = true
     component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
-    Y_endog = BVAR.get_endogenous(df_p, end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
 
     A_prior_unrestricted = structural_prior(template, free, component; names = end_vec_p)
     prior_unrestricted =
@@ -84,11 +84,21 @@ end
     )
     prior_impossible = hamilton_structural_prior(reduced_form, A_prior_impossible, Y_endog)
 
-    gram = BVAR.gram_blocks(est_p)
-    _, _, _, logw_unrestricted =
-        BVAR.draw_candidate(prior_unrestricted, gram, est_p.Σ, est_p.obs, Xoshiro(5))
-    _, _, _, logw_impossible =
-        BVAR.draw_candidate(prior_impossible, gram, est_p.Σ, est_p.obs, Xoshiro(5))
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    _, _, _, logw_unrestricted = BayesianVectorAutoregressions.draw_candidate(
+        prior_unrestricted,
+        gram,
+        est_p.Σ,
+        est_p.obs,
+        Xoshiro(5),
+    )
+    _, _, _, logw_impossible = BayesianVectorAutoregressions.draw_candidate(
+        prior_impossible,
+        gram,
+        est_p.Σ,
+        est_p.obs,
+        Xoshiro(5),
+    )
     @test isfinite(logw_unrestricted)
     @test logw_impossible == -Inf
 end

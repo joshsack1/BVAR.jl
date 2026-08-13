@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 # Pre-Estimation: Unit Roots, Cointegration and Lag Selection
@@ -12,7 +12,7 @@ include("plot-theme.jl")
 ```
 
 ```@example pre
-using BVAR
+using BayesianVectorAutoregressions
 using DataFrames
 using Random
 
@@ -72,14 +72,14 @@ alternative of more.
 ## Lag selection
 
 The four criteria — [`aic`](@ref), [`bic`](@ref), [`hq`](@ref), [`fpe`](@ref) — score a
-`VARresult`, the lightweight fit produced by `BVAR.generate_VARresult`. Note that neither that
-function nor `BVAR.get_endogenous` is exported, so both need qualifying, and that `VARresult`
+`VARresult`, the lightweight fit produced by `BayesianVectorAutoregressions.generate_VARresult`. Note that neither that
+function nor `BayesianVectorAutoregressions.get_endogenous` is exported, so both need qualifying, and that `VARresult`
 is a *different, lighter* object than the `VARestimate` returned by [`estimate_var`](@ref).
 
 ```@example pre
-Y = BVAR.get_endogenous(df, end_vars)
+Y = BayesianVectorAutoregressions.get_endogenous(df, end_vars)
 
-results = [BVAR.generate_VARresult(Y, p) for p in 1:6]
+results = [BayesianVectorAutoregressions.generate_VARresult(Y, p) for p in 1:6]
 
 for (p, r) in enumerate(results)
     println("p=", p,

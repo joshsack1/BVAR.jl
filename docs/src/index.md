@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
-# BVAR.jl
+# BayesianVectorAutoregressions.jl
 
 *Bayesian Vector Autoregressions in Julia*
 
-`BVAR.jl` provides an end-to-end framework for Vector Autoregressive (VAR) and Bayesian
+`BayesianVectorAutoregressions.jl` provides an end-to-end framework for Vector Autoregressive (VAR) and Bayesian
 Vector Autoregressive (BVAR) modeling. You bring a standard `DataFrame` and proceed
 sequentially through every stage of time-series modeling:
 
@@ -22,27 +22,27 @@ sequentially through every stage of time-series modeling:
 
 ## Installation
 
-`BVAR.jl` is not registered in the General registry, so install it by URL:
+`BayesianVectorAutoregressions.jl` is not registered in the General registry, so install it by URL:
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/joshsack1/BVAR.jl")
+Pkg.add(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
 ```
 
 Or, to hack on it:
 
 ```julia
 using Pkg
-Pkg.develop(url = "https://github.com/joshsack1/BVAR.jl")
+Pkg.develop(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
 ```
 
 Julia 1.12 or later is required.
 
 ## A single flat namespace
 
-Despite the subdirectory layout of `src/`, `BVAR` defines **no submodules**. Every name —
-exported or not — lives directly in `BVAR`. Unexported helpers are reached as
-`BVAR.get_endogenous`, and they are documented in the "Internals" section of each
+Despite the subdirectory layout of `src/`, `BayesianVectorAutoregressions` defines **no submodules**. Every name —
+exported or not — lives directly in `BayesianVectorAutoregressions`. Unexported helpers are reached as
+`BayesianVectorAutoregressions.get_endogenous`, and they are documented in the "Internals" section of each
 [API Reference](@ref api-data-testing) page.
 
 ## The five-stage pipeline
@@ -101,7 +101,7 @@ These are the places where a mistake is silent rather than loud.
   Gibbs sweeps, which are autocorrelated.
 
 - **Some helpers the README-style workflow needs are not exported.**
-  `BVAR.get_endogenous` and `BVAR.generate_VARresult` must be qualified.
+  `BayesianVectorAutoregressions.get_endogenous` and `BayesianVectorAutoregressions.generate_VARresult` must be qualified.
 
 ## Quickstart
 
@@ -110,7 +110,7 @@ include("plot-theme.jl")
 ```
 
 ```@example quickstart
-using BVAR
+using BayesianVectorAutoregressions
 using DataFrames
 using Random
 

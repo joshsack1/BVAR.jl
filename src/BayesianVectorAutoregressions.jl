@@ -1,4 +1,4 @@
-module BVAR
+module BayesianVectorAutoregressions
 
 # Define Dependencies
 using DataFrames
@@ -53,4 +53,4 @@ export identify_short_run, identify_sign_restrictions
 
 export impulse_response, IRFdraws, long_run_multiplier
 
-end # module BVAR
+end # module BayesianVectorAutoregressions

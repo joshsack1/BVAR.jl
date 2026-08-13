@@ -4,7 +4,7 @@
     for family in (:minnesota, :normal_wishart, :asymmetric_conjugate, :hamilton_baumeister)
         prior = build_prior(df_p, end_vec_p, est_p, family)
         draws = sample_posterior(prior, est_p; ndraws = 20, rng = Xoshiro(1))
-        @test draws isa BVAR.BVARdraws
+        @test draws isa BayesianVectorAutoregressions.BVARdraws
         @test draws.family == family
         @test length(draws.β) == 20
         @test length(draws.Σ) == 20
@@ -26,19 +26,25 @@ end
 end
 
 @testset "Posterior mean recovery against the analytic *_posterior helpers" begin
-    gram = BVAR.gram_blocks(est_p)
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
     n = length(end_vec_p)
 
     prior_mn = build_prior(df_p, end_vec_p, est_p, :minnesota)
     draws_mn = sample_posterior(prior_mn, est_p; ndraws = 5000, rng = Xoshiro(7))
-    post_mn = BVAR.minnesota_posterior(prior_mn, gram.XᵀX, gram.XᵀY)
+    post_mn =
+        BayesianVectorAutoregressions.minnesota_posterior(prior_mn, gram.XᵀX, gram.XᵀY)
     mean_β_mn = sum(draws_mn.β) / length(draws_mn.β)
     @test mean_β_mn ≈ post_mn.β̄ atol = 0.05
 
     prior_nw = build_prior(df_p, end_vec_p, est_p, :normal_wishart)
     draws_nw = sample_posterior(prior_nw, est_p; ndraws = 5000, rng = Xoshiro(7))
-    post_nw =
-        BVAR.normal_wishart_posterior(prior_nw, gram.XᵀX, gram.XᵀY, gram.YᵀY, est_p.obs)
+    post_nw = BayesianVectorAutoregressions.normal_wishart_posterior(
+        prior_nw,
+        gram.XᵀX,
+        gram.XᵀY,
+        gram.YᵀY,
+        est_p.obs,
+    )
     mean_β_nw = sum(draws_nw.β) / length(draws_nw.β)
     mean_Σ_nw = sum(draws_nw.Σ) / length(draws_nw.Σ)
     @test mean_β_nw ≈ post_nw.β̄ atol = 0.05
@@ -52,7 +58,7 @@ end
         m = getproperty(prior, means)
         M = getproperty(prior, scales)
         for i in 1:n
-            post = BVAR.equation_normal_gamma_posterior(
+            post = BayesianVectorAutoregressions.equation_normal_gamma_posterior(
                 m[i],
                 M[i],
                 prior.κ[i],

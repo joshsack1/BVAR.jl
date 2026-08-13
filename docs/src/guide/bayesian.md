@@ -1,5 +1,5 @@
 ```@meta
-CurrentModule = BVAR
+CurrentModule = BayesianVectorAutoregressions
 ```
 
 # Posterior Sampling: Closed Form and Gibbs
@@ -10,7 +10,7 @@ prior type you hand it** — the call site looks identical either way.
 
 ```@setup bayes
 include("plot-theme.jl")
-using BVAR, DataFrames, Random
+using BayesianVectorAutoregressions, DataFrames, Random
 Random.seed!(123)
 df = DataFrame(
     gdp = cumsum(0.5 .+ randn(150)),

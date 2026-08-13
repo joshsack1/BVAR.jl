@@ -1,6 +1,6 @@
 # How This Package Was Built
 
-This page exists because `BVAR.jl` was written with substantial help from a large language
+This page exists because `BayesianVectorAutoregressions.jl` was written with substantial help from a large language
 model, and you should know that before you use it to produce a number you intend to
 publish. Nothing in the Julia General registry requires this disclosure. It is here
 because econometric software fails quietly, and you should be able to calibrate how much
@@ -59,14 +59,14 @@ So that you can weigh the above against something concrete, the suite in `test/`
 - **Package QA** through `Aqua.jl`.
 
 That suite runs in
-[continuous integration](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml) on
+[continuous integration](https://github.com/joshsack1/BayesianVectorAutoregressions.jl/actions/workflows/CI.yml) on
 every push and pull request, against both the Julia version declared as this package's floor
 and latest stable — so the claim that these tests pass is one you can check rather than one
 you have to accept. You can also run all of it yourself:
 
 ```julia
 using Pkg
-Pkg.test("BVAR")
+Pkg.test("BayesianVectorAutoregressions")
 ```
 
 What this does **not** include: the package has not been validated by replicating the
@@ -91,7 +91,7 @@ So, concretely:
 
 ## Responsibility
 
-However the code was drafted, the author is responsible for it. `BVAR.jl` is released
+However the code was drafted, the author is responsible for it. `BayesianVectorAutoregressions.jl` is released
 under the MIT License, which disclaims warranty — but a disclaimer in a license file is
 not the point of this page. The point is that the author reviewed this code, chose to
 publish it, and intends to fix what turns out to be broken in it.
