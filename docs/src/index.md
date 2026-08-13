@@ -36,7 +36,7 @@ using Pkg
 Pkg.develop(url = "https://github.com/joshsack1/BVAR.jl")
 ```
 
-Julia 1.11 or later is required.
+Julia 1.12 or later is required.
 
 ## A single flat namespace
 
