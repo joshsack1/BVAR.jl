@@ -54,6 +54,7 @@ makedocs(;
             "Impulse Responses" => "api/irf.md",
         ],
         "Bibliography" => "references.md",
+        "How This Package Was Built" => "provenance.md",
     ],
 )
 

@@ -9,6 +9,11 @@
 `BVAR.jl` provides an end-to-end framework for Vector Autoregressive (VAR) and Bayesian Vector Autoregressive (BVAR) modeling in Julia.
 Designed for econometricians and data scientists, the package enables users to bring a standard `DataFrame` and proceed sequentially through every stage of time-series modeling:
 
+> *On authorship: the code in this package was drafted by a language model from mathematical
+> specifications written by the author, then reviewed against them; the documentation was
+> almost entirely model-written. See [How this package was built](#how-this-package-was-built)
+> below, or the [fuller statement in the docs](https://joshsack1.github.io/BVAR.jl/dev/provenance/).*
+
 1. **Unit Root & Cointegration Testing** (ADF tests, Johansen trace test)
 2. **Lag Selection & Information Criteria** (AIC, BIC, HQ, FPE)
 3. **Frequentist VAR Estimation** (Stacked OLS and Equation-by-Equation Fixed-Effect Models)
@@ -128,3 +133,36 @@ every example is executed as part of the documentation build.
    - **Gibbs Sampler**: `BVAR.jl`'s Gibbs driver executes analytic conditional draws directly, achieving **3.0×–13× faster** runtime compared to `BayesianVARs.jl`'s data re-collapse loop.
    - **IRF Transformation**: Computing IRFs over posterior draws is **2.1×–4.2× faster**.
 3. **Exact Posterior Parity**: Across all matched conjugate priors, `BVAR.jl` agrees with `BayesianVARs.jl` to machine precision ($\max |\Delta| \le 3.3 \times 10^{-10}$), confirming exact analytical equivalence.
+
+---
+
+## How this package was built
+
+`BVAR.jl` was written with substantial help from a large language model. The Julia General
+registry does not require anyone to say so; this is here because econometric software fails
+quietly, and you should be able to calibrate how much to trust this package instead of
+guessing.
+
+- **The mathematics is the author's** — every method was chosen and specified from the
+  literature cited in the docstrings, not derived by a model.
+- **The implementation code in `src/` was drafted by a language model** from those
+  specifications and then reviewed line-by-line against them.
+- **The tests were written jointly**: the author specified what to verify, the model helped
+  write the assertions.
+- **The documentation was almost entirely model-written.** Every code example in it is
+  executed on every docs build, so the code is verified. The prose and citations were
+  reviewed but not audited claim-by-claim.
+
+The failure mode worth worrying about here is not a crash — it is a result that is
+plausible, correctly typed, and wrong: a coefficient block sliced in the wrong order, a
+dropped normalization. The test suite targets that class of error directly, with
+hand-computed known-answer tests, reduction identities, cross-method agreement between the
+`:ols`/`:fem` estimators and the `:sir`/`:mh` samplers, and simulation-based coefficient
+recovery. It has *not* been validated by replicating any cited paper's published results.
+If you are using this for research, reproduce something you already know the answer to
+first, and check formulas against the papers the docstrings cite.
+
+However the code was drafted, the author is responsible for it, and intends to fix what
+turns out to be broken. Bug reports — including against the prose — are welcome and
+unusually valuable here. The full statement is
+[in the documentation](https://joshsack1.github.io/BVAR.jl/dev/provenance/).

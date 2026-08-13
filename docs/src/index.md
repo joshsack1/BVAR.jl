@@ -163,3 +163,6 @@ plot(
 - The **API Reference** is generated from the docstrings, split by stage, with exported names
   first and internal helpers below.
 - The **Bibliography** collects the papers the docstrings cite.
+- **How This Package Was Built** discloses how much of this package was drafted by a
+  language model, what verification stands behind it, and what you should check yourself
+  before using it in published work.
