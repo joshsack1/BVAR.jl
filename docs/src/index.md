@@ -22,11 +22,13 @@ sequentially through every stage of time-series modeling:
 
 ## Installation
 
-`BayesianVectorAutoregressions.jl` is not registered in the General registry, so install it by URL:
+Install from the General registry (or by URL while the registration is still in AutoMerge's
+waiting period):
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
+Pkg.add("BayesianVectorAutoregressions")
+# or: Pkg.add(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
 ```
 
 Or, to hack on it:
