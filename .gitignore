@@ -1,6 +1,12 @@
 CLAUDE.md
 adversarial-review/
 
+# A library's manifest is not committed: it would pin the dev environment for
+# everyone who clones, and it would make CI test one frozen dependency set
+# instead of the range [compat] claims to support. benchmark/Manifest.toml is
+# deliberately still tracked — that is a script environment, not the package.
+/Manifest.toml
+
 # Documenter
 docs/build/
 docs/Manifest.toml

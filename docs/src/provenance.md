@@ -58,7 +58,11 @@ So that you can weigh the above against something concrete, the suite in `test/`
   that.
 - **Package QA** through `Aqua.jl`.
 
-You can run all of it yourself:
+That suite runs in
+[continuous integration](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml) on
+every push and pull request, against both the Julia version declared as this package's floor
+and latest stable — so the claim that these tests pass is one you can check rather than one
+you have to accept. You can also run all of it yourself:
 
 ```julia
 using Pkg

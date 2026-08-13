@@ -1,5 +1,7 @@
 # BVAR.jl
 
+[![CI](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/joshsack1/BVAR.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/joshsack1/BVAR.jl)
 [![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://joshsack1.github.io/BVAR.jl/dev/)
 [![Documentation](https://github.com/joshsack1/BVAR.jl/actions/workflows/Documenter.yml/badge.svg)](https://github.com/joshsack1/BVAR.jl/actions/workflows/Documenter.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -158,7 +160,10 @@ plausible, correctly typed, and wrong: a coefficient block sliced in the wrong o
 dropped normalization. The test suite targets that class of error directly, with
 hand-computed known-answer tests, reduction identities, cross-method agreement between the
 `:ols`/`:fem` estimators and the `:sir`/`:mh` samplers, and simulation-based coefficient
-recovery. It has *not* been validated by replicating any cited paper's published results.
+recovery. It runs [on every push](https://github.com/joshsack1/BVAR.jl/actions/workflows/CI.yml)
+against both the declared Julia floor and latest stable, so the badge above is the evidence —
+you do not have to take the claim on faith.
+It has *not* been validated by replicating any cited paper's published results.
 If you are using this for research, reproduce something you already know the answer to
 first, and check formulas against the papers the docstrings cite.
 
