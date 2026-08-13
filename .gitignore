@@ -1,6 +1,10 @@
 CLAUDE.md
 adversarial-review/
 
+# Documenter
+docs/build/
+docs/Manifest.toml
+
 # local package-comparison write-up (not part of the package)
 BVAR-Pkg-Comparison-2026-08-13.qmd
 BVAR-Pkg-Comparison-2026-08-13.html
