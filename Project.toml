@@ -1,6 +1,6 @@
 name = "BVAR"
 uuid = "41625412-354d-4823-8550-7966f37a0530"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Joshua Sack <jsack@joshsack.com>"]
 
 [deps]
