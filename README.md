@@ -37,13 +37,11 @@ Designed for econometricians and data scientists, the package enables users to b
 
 ## Installation
 
-Install from the General registry (or by URL while the registration is still in AutoMerge's
-waiting period):
+Install from the General registry:
 
 ```julia
 using Pkg
 Pkg.add("BayesianVectorAutoregressions")
-# or: Pkg.add(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
 ```
 
 Julia 1.12 or later is required.
