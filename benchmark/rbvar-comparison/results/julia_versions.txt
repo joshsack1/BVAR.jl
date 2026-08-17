@@ -1,0 +1,20 @@
+=== Julia ===
+julia version: 1.12.6
+word size: 64  cpu threads: 4
+julia threads: 1
+
+=== BLAS ===
+BLAS.get_config():
+  /Users/jsack/.julia/juliaup/julia-1.12.6+0.aarch64.apple.darwin14/lib/julia/libopenblas64_.dylib  interface=ilp64
+BLAS.get_num_threads(): 1
+LAPACK: 3.12.0
+
+=== BLAS thread env ===
+OPENBLAS_NUM_THREADS=1
+VECLIB_MAXIMUM_THREADS=1
+OMP_NUM_THREADS=1
+
+=== Hardware / OS ===
+chip: Apple M4
+os: 26.6.1
+build: 25G76

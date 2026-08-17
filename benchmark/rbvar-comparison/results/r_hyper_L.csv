@@ -1,0 +1,17 @@
+key,value
+lambda_mean,2.0000000000946430e-01
+lambda_sd,4.9705867579680529e-11
+lambda_min,1.9999999987927281e-01
+lambda_max,2.0000000013273164e-01
+lambda_optim_mode,2.0000000000000001e-01
+mh_accept_rate,8.0000000000000004e-01
+mh_accepted,20000
+n_draw,25000
+n_save,20000
+N,395
+K,51
+M,10
+beta_dim,20000x51x10
+beta_dim_order,n_save x K x M
+explanatories,constant|y1-lag1|y2-lag1|y3-lag1|y4-lag1|y5-lag1|y6-lag1|y7-lag1|y8-lag1|y9-lag1|y10-lag1|y1-lag2|y2-lag2|y3-lag2|y4-lag2|y5-lag2|y6-lag2|y7-lag2|y8-lag2|y9-lag2|y10-lag2|y1-lag3|y2-lag3|y3-lag3|y4-lag3|y5-lag3|y6-lag3|y7-lag3|y8-lag3|y9-lag3|y10-lag3|y1-lag4|y2-lag4|y3-lag4|y4-lag4|y5-lag4|y6-lag4|y7-lag4|y8-lag4|y9-lag4|y10-lag4|y1-lag5|y2-lag5|y3-lag5|y4-lag5|y5-lag5|y6-lag5|y7-lag5|y8-lag5|y9-lag5|y10-lag5
+variables,y1|y2|y3|y4|y5|y6|y7|y8|y9|y10

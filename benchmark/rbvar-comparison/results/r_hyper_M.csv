@@ -1,0 +1,17 @@
+key,value
+lambda_mean,1.9999999989992515e-01
+lambda_sd,6.1764768779488210e-11
+lambda_min,1.9999999972560578e-01
+lambda_max,2.0000000003096174e-01
+lambda_optim_mode,2.0000000000000001e-01
+mh_accept_rate,8.0000000000000004e-01
+mh_accepted,20000
+n_draw,25000
+n_save,20000
+N,796
+K,25
+M,6
+beta_dim,20000x25x6
+beta_dim_order,n_save x K x M
+explanatories,constant|y1-lag1|y2-lag1|y3-lag1|y4-lag1|y5-lag1|y6-lag1|y1-lag2|y2-lag2|y3-lag2|y4-lag2|y5-lag2|y6-lag2|y1-lag3|y2-lag3|y3-lag3|y4-lag3|y5-lag3|y6-lag3|y1-lag4|y2-lag4|y3-lag4|y4-lag4|y5-lag4|y6-lag4
+variables,y1|y2|y3|y4|y5|y6

@@ -37,13 +37,11 @@ Designed for econometricians and data scientists, the package enables users to b
 
 ## Installation
 
-Install from the General registry (or by URL while the registration is still in AutoMerge's
-waiting period):
+Install from the General registry:
 
 ```julia
 using Pkg
 Pkg.add("BayesianVectorAutoregressions")
-# or: Pkg.add(url = "https://github.com/joshsack1/BayesianVectorAutoregressions.jl")
 ```
 
 Julia 1.12 or later is required.
@@ -98,47 +96,70 @@ every example is executed as part of the documentation build.
 
 ---
 
-## Capability Comparison: `BayesianVectorAutoregressions.jl` vs [`BayesianVARs.jl`](https://github.com/elenev/BayesianVARs.jl)
+## Capability Comparison: `BayesianVectorAutoregressions.jl` vs BVAR (R)
 
-`BayesianVectorAutoregressions.jl` was evaluated head-to-head against `BayesianVARs.jl` across functionality, posterior precision, and benchmark execution speed. Both packages were run on identical simulated data with matched priors and draw counts; timings come from `BenchmarkTools` and the parity check compares posterior moments elementwise. The benchmark harness lives in `benchmark/` and is run with `julia --project=benchmark benchmark/benchmarks.jl`. A summary of the findings follows.
+`BayesianVectorAutoregressions.jl` was compared against [BVAR](https://github.com/nk027/bvar) (CRAN v1.0.5; Kuschnig & Vashold 2021, *Journal of Statistical Software* 100(14), [doi:10.18637/jss.v100.i14](https://doi.org/10.18637/jss.v100.i14)) — the standard hierarchical-Minnesota BVAR package in R. The comparison covers capabilities, numerical parity on a matched conjugate prior, and speed on matched tasks. The harness is fully reproducible and lives in `benchmark/rbvar-comparison/` (run `./run.sh`; requires R with the `BVAR` package installed).
 
 ### Capability Matrix
 
-| Feature / Capability | `BayesianVectorAutoregressions.jl` | `BayesianVARs.jl` |
+| Feature / Capability | `BayesianVectorAutoregressions.jl` | BVAR (R) |
 |:---|:---:|:---:|
 | **Pre-Estimation & Lag Selection** | | |
-| ADF Unit-Root Tests | ✓ (3 deterministic specs) | — |
-| Johansen Trace Test | ✓ (statistics & eigenvalues) | — |
+| ADF Unit-Root Tests | ✓ | — |
+| Johansen Trace Test | ✓ | — |
 | Information Criteria (AIC, BIC, HQ, FPE) | ✓ | — |
 | Standalone OLS / FEM Reduced-Form VAR | ✓ | — |
-| **Prior Families** | **9 families** | **1 family** (Minnesota) |
-| Minnesota Prior (Litterman 1986) | ✓ (with cross-equation λ₂ asymmetry) | ✓ (3 structural variants) |
-| Natural-Conjugate Normal-Wishart | ✓ | ✓ |
-| Dummy-Observation Minnesota (BGR 2010) | ✓ (composable) | — |
-| Sum-of-Coefficients (DLS 1984) | ✓ (composable) | — |
-| Dummy Initial Observation (Sims 1993) | ✓ (composable) | — |
-| Prior for the Long Run (GLP 2019) | ✓ (composable) | — |
-| Independent Normal-Inverse-Wishart | ✓ (Gibbs sampler) | ✓ (Gibbs sampler) |
-| Asymmetric Conjugate (Chan 2022) | ✓ (closed form) | — |
-| Baumeister-Hamilton (2019) Reference Prior | ✓ (reduced & structural) | — |
-| Automatic Hyperparameter Selection | ✓ (Golden-section search) | — |
+| **Prior Families** | | |
+| Prior Families (count) | **9 families** | **1 family** (hierarchical Minnesota-NIW + dummy extensions) |
+| Minnesota Normal-Wishart Conjugate Prior | ✓ | ✓ |
+| Sum-of-Coefficients / Dummy-Initial-Observation Priors | ✓ (composable — entire prior derived from stacked dummies) | ✓ (dummy rows appended to the parametric Minnesota prior, à la Theil mixed estimation)* |
+| Asymmetric Conjugate Prior (Chan 2022) | ✓ | — |
+| Baumeister-Hamilton (2019) Structural Prior | ✓ | — |
+| Hyperparameter Selection | ◐ (point-optimizes the marginal likelihood via golden-section search) | ✓ (full hierarchical posterior via Metropolis-Hastings; Giannone-Lenza-Primiceri 2015) |
 | **MCMC & Samplers** | | |
-| Closed-Form Conjugate Posterior Sampling | ✓ (i.i.d. draws) | ✓ (distribution objects) |
-| Gibbs Sampler Performance | **3.0× – 13× faster** | Baseline (re-collapses data every sweep) |
+| Independent Normal-Inverse-Wishart Gibbs Sampler | ✓ | — |
+| Exact i.i.d. Draws from the Closed-Form Conjugate Posterior | ✓ | — |
+| Parallel Chains + `coda` Integration | — | ✓ |
 | **Structural Identification & Post-Processing** | | |
-| Recursive / Cholesky Identification | ✓ | ◐ (IRF method only) |
-| Sign Restrictions (Uhlig 2005; RWZ 2010) | ✓ (QR rotations) | — |
-| Baumeister-Hamilton $p(A)$ Structural Framework | ✓ (SIR & MH with ESS/Acceptance) | — |
-| Long-Run Multiplier Restrictions (Blanchard-Quah) | ✓ (via restriction closures) | — |
-| Posterior IRF Calculation Speed | **2.1× – 4.2× faster** | Baseline |
+| Recursive / Cholesky Identification | ✓ | ✓ |
+| Sign Restrictions | ✓ | ✓ |
+| Zero-and-Sign Restrictions (Arias-Rubio-Ramírez-Waggoner 2018) | — | ✓ |
+| Long-Run Multiplier Restrictions (Blanchard-Quah, via restriction closures) | ✓ | — |
+| Baumeister-Hamilton $p(A)$ Structural Framework | ✓ | — |
+| **Forecasting & Diagnostics** | | |
+| Unconditional & Conditional Forecasts (Waggoner-Zha 1999) | — | ✓ |
+| Forecast Error Variance Decomposition (FEVD) | — | ✓ |
+| Historical Decomposition | — | ✓ |
+| Model Diagnostics (WAIC, Log Predictive Scores, RMSE) | — | ✓ |
+| Plotting Methods | — | ✓ |
+| Bundled FRED-QD/MD Data with Transforms | — | ✓ |
 
-### Key Highlights
+\* Composition semantics differ: `BayesianVectorAutoregressions.jl` derives the entire prior from stacked dummy observations, while R's `BVAR` appends dummy rows to the parametric Minnesota prior in the style of Theil mixed estimation. Both are ✓ but the two are not interchangeable implementations of the same construction.
 
-1. **Broad Prior Ecosystem**: `BayesianVectorAutoregressions.jl` supports 9 distinct prior specifications (including composable dummy observation priors, Chan's asymmetric conjugate prior, and Baumeister-Hamilton reference priors), compared to `BayesianVARs.jl`'s Minnesota-only scope.
-2. **Speed & Efficiency**:
-   - **Gibbs Sampler**: `BayesianVectorAutoregressions.jl`'s Gibbs driver executes analytic conditional draws directly, achieving **3.0×–13× faster** runtime compared to `BayesianVARs.jl`'s data re-collapse loop.
-   - **IRF Transformation**: Computing IRFs over posterior draws is **2.1×–4.2× faster**.
-3. **Exact Posterior Parity**: Across all matched conjugate priors, `BayesianVectorAutoregressions.jl` agrees with `BayesianVARs.jl` to machine precision ($\max |\Delta| \le 3.3 \times 10^{-10}$), confirming exact analytical equivalence.
+### Posterior Parity
+
+The two packages were matched on the plain Minnesota Normal-Wishart conjugate prior with fixed hyperparameters: overall tightness λ1 ↔ `lambda` (0.2, both defaults), lag decay λ3 ↔ `alpha` (`alpha = 2λ3`, both defaults), prior scale σ̂ⱼ² computed in Julia and passed to R explicitly as `psi`, constant-term variance λ4² = `var` = 1e7, a random-walk prior mean, and identical Wishart degrees of freedom. Both packages use the same design-matrix layout (constant, then lag-major blocks), so posterior moments compare elementwise with no permutation needed.
+
+R's `BVAR` cannot run in a fully non-hierarchical mode — it requires at least one hierarchical hyperparameter — so λ was pinned via a near-degenerate hyperprior (sd 1e-6, with the Metropolis-Hastings proposal scaled to match); the realized λ draws had sd ≈ 5e-11 around 0.2, with an 80% MH acceptance rate.
+
+With 20,000 stored R draws per model size, every posterior mean of β and Σ agrees with the Julia **closed-form** posterior within Monte-Carlo error: max |z| = 3.20 across all elements and all three model sizes (gate: 5), max absolute deviation ≤ 1.2 × 10⁻³. A secondary two-sample check of R's Monte-Carlo means against Julia's own 20,000-draw sampler also passes (max |z| = 2.88). R's Monte-Carlo standard deviations match the analytic matrix-t / inverse-Wishart marginal sds within ±1.5%.
+
+This parity is statistical, not bitwise — there is no shared RNG across languages — and it is scoped to this one matched conjugate configuration. It does not cover R's hierarchical posterior (which `BayesianVectorAutoregressions.jl` does not implement) or the Julia-only prior families.
+
+### Speed
+
+Apple M4, macOS 26.6, single-threaded BLAS on both sides, Julia 1.12.6 + OpenBLAS, R 4.6.1 + Homebrew OpenBLAS. Julia timings are `BenchmarkTools` medians; R timings are medians of 5 timed reps after warmup.
+
+| Model size | Task | Julia | R BVAR | Ratio |
+|:---|:---|---:|---:|---:|
+| S (T=200, n=3, p=2) | 1000 stored posterior draws | 1.1 ms | 150 ms | 134× |
+| S (T=200, n=3, p=2) | Cholesky IRFs (21 periods × 1000 draws) | 2.9 ms | 29 ms | 10.0× |
+| M (T=800, n=6, p=4) | 1000 stored posterior draws | 3.2 ms | 347 ms | 108× |
+| M (T=800, n=6, p=4) | Cholesky IRFs (21 periods × 1000 draws) | 23.6 ms | 104 ms | 4.4× |
+| L (T=400, n=10, p=5) | 1000 stored posterior draws | 11.7 ms | 536 ms | 46× |
+| L (T=400, n=10, p=5) | Cholesky IRFs (21 periods × 1000 draws) | 125 ms | 424 ms | 3.4× |
+
+These ratios are end-to-end costs of the same user-facing task, not kernel benchmarks, and the architectures being timed are not the same shape. R's `bvar()` has no non-hierarchical mode: producing 1000 stored draws necessarily includes a one-off L-BFGS-B marginal-likelihood optimization, 1000 burn-in iterations, and a Metropolis-Hastings step with a marginal-likelihood evaluation on every iteration. `BayesianVectorAutoregressions.jl` instead draws i.i.d. from the closed-form posterior with hyperparameters taken as given. That architectural difference — not raw linear-algebra speed — accounts for most of the gap in the draws row. The IRF ratio compares against R's bare IRF computation loop; R's public `irf()` also computes quantile bands by default, which the Julia function does not, and was timed separately (slightly slower still).
 
 ---
 
