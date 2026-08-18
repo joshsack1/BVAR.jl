@@ -231,9 +231,7 @@ draw_A(prior::AbstractStructuralPrior, rng::Random.AbstractRNG) =
 """
     log_likelihood_weight(
         A::AbstractMatrix,
-        m::Vector{<:AbstractVector},
-        M::Vector{<:AbstractMatrix},
-        κ::Vector,
+        rf::BaumeisterHamiltonPrior,
         Ŝ::AbstractMatrix,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
@@ -251,7 +249,11 @@ where ``\\hat\\Omega_T`` (`Σ̂`) is the reduced-form MLE residual covariance,
 ``\\tau_i(A)=\\kappa_i\\,a_i'\\hat Sa_i`` (``a_i'=A[i,:]``), and
 ``\\tau_i^*(A)``/``\\kappa_i^*`` come from `equation_normal_gamma_posterior`
 applied to the transformed dependent variable ``a_i'y_t``, via
-``X'y_i(A)=X'Y\\cdot a_i``, ``y_i(A)'y_i(A)=a_i'Y'Ya_i``. Returns
+``X'y_i(A)=X'Y\\cdot a_i``, ``y_i(A)'y_i(A)=a_i'Y'Ya_i``. When the
+reduced-form prior carries an `η` (`rf.η !== nothing`) equation ``i``'s prior
+mean is itself ``A``-dependent, ``m_i(A)=\\eta'a_i`` (the paper's structural
+random-walk construction when ``\\eta``'s rows are the unit vectors ``e_i`` on
+each equation's own first lag); otherwise it is the constant `rf.m[i]`. Returns
 `(logw, posts)`, `posts[i]` the per-equation posterior so that a `(B,D)\\mid A`
 draw reuses it directly rather than recomputing it. ``A``'s element type is
 deliberately independent of the prior's — everything here promotes — so a
@@ -260,15 +262,16 @@ Internal; called by `evaluate_candidate`.
 """
 function log_likelihood_weight(
     A::AbstractMatrix{S},
-    m::Vector{<:AbstractVector{T}},
-    M::Vector{<:AbstractMatrix{T}},
-    κ::Vector{T},
+    rf::BaumeisterHamiltonPrior{T},
     Ŝ::AbstractMatrix{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
     obs::Int,
 ) where {S<:Real,T<:Real}
     n = size(A, 1)
+    # Hoisted out of the loop so the Union split on the A-dependent-mean case
+    # happens once per candidate A rather than once per equation.
+    η = rf.η
     # A near-singular A can make the (mathematically PSD) product numerically
     # indefinite or exactly singular; logdet would throw a DomainError there
     # and crash a chain mid-run. A candidate with zero density should instead
@@ -278,17 +281,28 @@ function log_likelihood_weight(
     posts = Vector{NamedTuple}(undef, n)
     for i in 1:n
         aᵢ = A[i, :]
-        τᵢ = κ[i] * dot(aᵢ, Ŝ, aᵢ)
+        τᵢ = rf.κ[i] * dot(aᵢ, Ŝ, aᵢ)
+        # η' is a lazy Adjoint: no transpose is materialized, and a Dual-valued
+        # aᵢ promotes mᵢ rather than being narrowed to the prior's T.
+        mᵢ = η === nothing ? rf.m[i] : η' * aᵢ
         Xᵀyᵢ = gram.XᵀY * aᵢ
         yᵀyᵢ = dot(aᵢ, gram.YᵀY, aᵢ)
-        post =
-            equation_normal_gamma_posterior(m[i], M[i], κ[i], τᵢ, gram.XᵀX, Xᵀyᵢ, yᵀyᵢ, obs)
+        post = equation_normal_gamma_posterior(
+            mᵢ,
+            rf.M[i],
+            rf.κ[i],
+            τᵢ,
+            gram.XᵀX,
+            Xᵀyᵢ,
+            yᵀyᵢ,
+            obs,
+        )
         posts[i] = post
         # τ and τ̄ are positive for any nondegenerate A (Ŝ and the posterior
         # sum of squares are PSD); at a degenerate A rounding can push them to
         # 0 or barely below, where log would throw — zero density again.
         if τᵢ > 0 && post.τ̄ > 0
-            logw += κ[i] * log(τᵢ) - post.κ̄ * log((2 / obs) * post.τ̄)
+            logw += rf.κ[i] * log(τᵢ) - post.κ̄ * log((2 / obs) * post.τ̄)
         else
             logw = oftype(logw, -Inf)
         end
@@ -324,7 +338,7 @@ function evaluate_candidate(
 ) where {T<:Real}
     rf = prior.reduced_form
     A = theta_to_A(prior.A_prior, θ)
-    logw, posts = log_likelihood_weight(A, rf.m, rf.M, rf.κ, prior.Ŝ, gram, Σ̂, obs)
+    logw, posts = log_likelihood_weight(A, rf, prior.Ŝ, gram, Σ̂, obs)
     # Extra log-prior terms on (θ,A) never cancel from any acceptance ratio,
     # unlike the marginal θ priors the independence proposal draws from.
     logw += extra_log_prior(prior.A_prior, θ, A)
@@ -664,7 +678,7 @@ function structural_log_posterior(
         # transforms (e.g. Baumeister & Hamilton's -1/χ) can be undefined there.
         isfinite(lp) || return -Inf
         A = theta_to_A(A_prior, θ)
-        logw, posts = log_likelihood_weight(A, rf.m, rf.M, rf.κ, prior.Ŝ, gram, Σ̂, obs)
+        logw, posts = log_likelihood_weight(A, rf, prior.Ŝ, gram, Σ̂, obs)
         logw += extra_log_prior(A_prior, θ, A)
         # Zero density already — don't hand a degenerate A/B̄ to user
         # restriction closures (long_run_multiplier would invert singular A).

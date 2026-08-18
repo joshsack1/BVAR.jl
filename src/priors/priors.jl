@@ -69,8 +69,11 @@ golden-section coordinate ascent (`optimize_hyperparameters`). Passing
 `hyperparameter_method = :fixed` together with an explicit `hyperparameters`
 `NamedTuple` (whose expected keys match the corresponding `*_prior`
 function's keyword arguments — e.g. `(λ1, λ2, λ3, λ4)` for `:minnesota`, or
-`(λ0, λ1, λ3, κ0, random_walk)` for `:hamilton_baumeister`) uses those values
-directly instead; `hyperparameters` may only be passed alongside
+`(λ0, λ1, λ3, κ0, random_walk, m, η)` for `:hamilton_baumeister`) uses those
+values directly instead; `hyperparameters` may only be passed alongside
+`hyperparameter_method = :fixed`. The Baumeister-Hamilton prior-mean keywords
+`m` (a constant prior mean per equation) and `η` (an ``A``-dependent prior
+mean, ``m_i(A) = \\eta'a_i``) are therefore only reachable under
 `hyperparameter_method = :fixed`.
 """
 function build_prior(

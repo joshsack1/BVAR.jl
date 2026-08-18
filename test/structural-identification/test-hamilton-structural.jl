@@ -398,6 +398,115 @@ end
     @test all(det(A) > 0 for A in draws.A)  # supply slope above demand slope
 end
 
+@testset "η prior mean with A fixed at I is bit-identical to the random-walk prior" begin
+    n = length(end_vec_p)
+    k = n * lags_p + 1
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    rf_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    rf_rw = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true,
+    )
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}()
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    prior_η = hamilton_structural_prior(rf_η, A_prior, Y_endog)
+    prior_rw = hamilton_structural_prior(rf_rw, A_prior, Y_endog)
+
+    # With every A ≡ I, mᵢ(I) = η'eᵢ = the random-walk mean exactly, and the
+    # RNG stream is identical — so the (B, D) | A draws must match bit-for-bit.
+    draws_η, _ =
+        sample_structural(prior_η, est_p; ndraws = 500, rng = Xoshiro(11), method = :mh)
+    draws_rw, _ =
+        sample_structural(prior_rw, est_p; ndraws = 500, rng = Xoshiro(11), method = :mh)
+    @test draws_η.A == draws_rw.A
+    @test draws_η.B == draws_rw.B
+    @test draws_η.D == draws_rw.D
+end
+
+@testset "η rotates the prior mean with A: exact identity against constant m" begin
+    n = length(end_vec_p)
+    k = n * lags_p + 1
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+
+    rf_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    prior_η = hamilton_structural_prior(rf_η, A_prior, Y_endog)
+    logpost_η = structural_log_posterior(prior_η, est_p)
+
+    # At a fixed θ, a constant-m prior whose m is η'aᵢ evaluated at that θ's A
+    # must give the identical log posterior — this pins the mᵢ(A) seam exactly.
+    θ_pin = [0.5]
+    A_pin = [1.0 0.0; 0.5 1.0]
+    m_pin = [Vector(η_rw' * A_pin[i, :]) for i in 1:n]
+    rf_const = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, m = m_pin,
+    )
+    prior_const = hamilton_structural_prior(rf_const, A_prior, Y_endog)
+    @test logpost_η(θ_pin) == structural_log_posterior(prior_const, est_p)(θ_pin)
+
+    # At A = I the η prior coincides with the random-walk prior; away from I
+    # the A-dependence must actually bite.
+    rf_rw = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true,
+    )
+    prior_rw = hamilton_structural_prior(rf_rw, A_prior, Y_endog)
+    logpost_rw = structural_log_posterior(prior_rw, est_p)
+    @test logpost_η([0.0]) == logpost_rw([0.0])
+    @test logpost_η(θ_pin) != logpost_rw(θ_pin)
+end
+
+@testset "η path is differentiable and samples under :rwmh" begin
+    n = length(end_vec_p)
+    k = n * lags_p + 1
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    rf_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    prior_η = hamilton_structural_prior(rf_η, A_prior, Y_endog)
+    logpost = structural_log_posterior(prior_η, est_p)
+
+    # The mean's A-dependence must enter the gradient: check autodiff against
+    # a central finite difference (it would silently vanish if mᵢ were built
+    # from a Float-truncated aᵢ).
+    θ0 = [0.3]
+    grad = BayesianVectorAutoregressions.ForwardDiff.gradient(logpost, θ0)
+    @test all(isfinite, grad)
+    h = 1e-6
+    fd = (logpost([θ0[1] + h]) - logpost([θ0[1] - h])) / (2h)
+    @test grad[1] ≈ fd rtol = 1e-6
+
+    draws, diag =
+        sample_structural(prior_η, est_p; ndraws = 1000, rng = Xoshiro(7), method = :rwmh)
+    @test 0 < diag.acceptance_rate < 1
+    @test length(draws.A) == 1000
+end
+
 @testset "det_sign_restriction and long_run_sign_restriction" begin
     A_pos = [1.0 0.0; 0.0 1.0]  # det = 1 > 0
     A_neg = [0.0 1.0; 1.0 0.0]  # det = -1 < 0
