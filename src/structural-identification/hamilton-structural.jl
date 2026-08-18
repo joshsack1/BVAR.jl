@@ -59,15 +59,99 @@ function structural_prior(
 end
 
 """
+    parametric_structural_prior(
+        θ_prior::Vector{<:UnivariateDistribution},
+        map::Function,
+        vars::Int;
+        extra_logprior::Vector{<:Function} = Function[],
+        restrictions::Vector{<:Function} = Function[],
+        names::Vector{Symbol} = [Symbol(:y, i) for i in 1:vars],
+    )
+
+Builds a *parametric* prior on the structural rotation matrix ``A`` of
+Baumeister & Hamilton (2019, AER): independent priors on a parameter vector
+``\\theta`` (`θ_prior`, one marginal per element) together with a map
+``A=A(\\theta)`` (`map`, taking a length-`length(θ_prior)` vector to an
+``n\\times n`` matrix, ``n=`` `vars`), times any number of extra log-prior
+terms on functions of ``(\\theta,A)`` and any number of nonlinear joint
+restrictions on ``(A,B)``,
+
+``p(\\theta) \\propto \\prod_k p_k(\\theta_k) \\cdot \\prod_g
+\\exp\\!\\big(g(\\theta,A(\\theta))\\big) \\cdot \\prod_r
+\\exp\\!\\big(r(A(\\theta),B)\\big).``
+
+This is the paper's own parameterization — a handful of economic quantities
+(elasticities, multipliers) entering ``A`` nonlinearly, so that the priors
+are elicited on interpretable objects rather than on ``A``'s entries as
+`structural_prior` does. `extra_logprior` carries priors on *functions* of
+``A`` that are not marginals of any single ``\\theta_k`` (the paper's
+asymmetric-``t`` prior on ``\\det(\\tilde A)`` and Student-``t`` prior on an
+entry of ``\\tilde A^{-1}``, each written by hand as a log-density since
+`Distributions.jl` ships no skew-``t``); unlike the ``\\theta`` marginals,
+which candidates are drawn from and which therefore cancel, these never
+cancel out of any sampler's acceptance ratio. `restrictions` has exactly the
+same ``r(A,B)\\to\\mathbb{R}`` contract as in `structural_prior`. The map is
+smoke-checked once at ``\\theta=`` `median.(θ_prior)` (the median, not the
+mean: a `TDist(ν≤2)` marginal has no finite mean, and `mean` has no method
+for a generic `Truncated`) to catch a wrong output shape or element type at
+construction rather than deep inside the sampler. Consumed by
+`hamilton_structural_prior`/`sample_structural`.
+
+# Examples
+```julia
+# Baumeister-Hamilton-style supply/demand block: two elasticities, θ = (α, β)
+θ_prior = UnivariateDistribution[
+    Truncated(TDist(3), 0.0, Inf),    # supply elasticity, sign-restricted
+    Truncated(TDist(3), -Inf, 0.0),   # demand elasticity, sign-restricted
+]
+A_map(θ) = [1.0 -θ[1]; 1.0 -θ[2]]
+prior = parametric_structural_prior(
+    θ_prior,
+    A_map,
+    2;
+    extra_logprior = Function[(θ, A) -> logpdf(TDist(3), det(A))],
+    names = [:quantity, :price],
+)
+```
+"""
+function parametric_structural_prior(
+    θ_prior::Vector{<:UnivariateDistribution},
+    map::Function,
+    vars::Int;
+    extra_logprior::Vector{<:Function} = Function[],
+    restrictions::Vector{<:Function} = Function[],
+    names::Vector{Symbol} = [Symbol(:y, i) for i in 1:vars],
+)
+    @assert !isempty(θ_prior) "θ_prior must contain at least one marginal prior (a ParametricStructuralPrior with no parameters has nothing to sample)"
+    @assert length(names) == vars "names must have length vars"
+    # Smoke-check the map once, at the prior medians: the median is always
+    # defined, whereas mean is Inf/undefined for TDist(ν≤2) and has no method
+    # for a generic Truncated — both routine choices for a θ marginal here.
+    θ_med = median.(θ_prior)
+    A_med = map(θ_med)
+    @assert size(A_med) == (vars, vars) "map must return a vars×vars matrix (got $(size(A_med)) for vars = $vars)"
+    @assert eltype(A_med) <: Real "map must return a matrix of Reals (got eltype $(eltype(A_med)))"
+    return ParametricStructuralPrior{Float64}(
+        Vector{UnivariateDistribution}(θ_prior),
+        map,
+        extra_logprior,
+        restrictions,
+        vars,
+        names,
+    )
+end
+
+"""
     hamilton_structural_prior(
         reduced_form::BaumeisterHamiltonPrior,
-        A_prior::StructuralPrior,
+        A_prior::AbstractStructuralPrior,
         Y::AbstractMatrix,
     )
 
 Builds a `HamiltonStructuralPrior` pairing the reduced-form per-equation
 ``B,D\\mid A`` prior `reduced_form` (from `baumeister_hamilton_prior`) with
-the structural prior `A_prior` on ``A`` (from `structural_prior`), computing
+the structural prior `A_prior` on ``A`` (from `structural_prior` or
+`parametric_structural_prior`), computing
 ``\\hat S`` (`ar_residual_covariance`) from the same data `Y` and lag order
 `reduced_form.lags` used to build `reduced_form`. Checks that the two priors
 name the same variables in the same order — otherwise ``A``'s rows would be
@@ -76,7 +160,7 @@ column per variable.
 """
 function hamilton_structural_prior(
     reduced_form::BaumeisterHamiltonPrior{T},
-    A_prior::StructuralPrior{T},
+    A_prior::AbstractStructuralPrior{T},
     Y::AbstractMatrix{T},
 ) where {T<:Real}
     @assert reduced_form.vars == A_prior.vars "reduced_form and A_prior must have the same number of variables"
@@ -97,11 +181,52 @@ function assemble_A(
     return A
 end
 
-function draw_A(prior::StructuralPrior{T}, rng::Random.AbstractRNG) where {T<:Real}
-    values =
-        Dict{Tuple{Int,Int},T}(idx => T(rand(rng, dist)) for (idx, dist) in prior.component)
-    return assemble_A(prior, values)
+# The θ interface both structural priors share: θ is the vector of quantities
+# a sampler actually moves in (A's free entries, or the economic parameters),
+# and theta_to_A is the only place that knows how θ becomes A.
+
+nparams(p::StructuralPrior) = count(p.free)
+nparams(p::ParametricStructuralPrior) = length(p.θ_prior)
+
+# Column-major order (findall on a BitMatrix is deterministic). This ordering
+# is the canonical θ ordering for per-entry priors — marginals, theta_to_A and
+# any proposal covariance must all agree on it, so it must never be reordered.
+free_indices(p::StructuralPrior) = Tuple.(findall(p.free))
+
+marginals(p::StructuralPrior) = [p.component[idx] for idx in free_indices(p)]
+marginals(p::ParametricStructuralPrior) = p.θ_prior
+
+# Independent draw from the marginals, in canonical θ order. Annotated with the
+# prior's T (as the old Dict-based draw_A was): the empty case — a fully fixed
+# A, no free entries — would otherwise infer Vector{Any} and poison A's eltype.
+draw_theta(p::AbstractStructuralPrior{T}, rng::Random.AbstractRNG) where {T<:Real} =
+    T[rand(rng, d) for d in marginals(p)]
+
+# Never convert θ's elements to the prior's T: a ForwardDiff.Dual θ must
+# survive into A (an autodiff proposal tuner differentiates through this).
+function theta_to_A(p::StructuralPrior, θ::AbstractVector)
+    A = Matrix{promote_type(eltype(p.template), eltype(θ))}(p.template)
+    for (k, idx) in enumerate(free_indices(p))
+        A[idx[1], idx[2]] = θ[k]
+    end
+    return A
 end
+
+function theta_to_A(p::ParametricStructuralPrior, θ::AbstractVector)
+    A = p.map(θ)
+    @assert size(A) == (p.vars, p.vars) "the parametric prior's map returned a $(size(A)) matrix, expected ($(p.vars), $(p.vars))"
+    return Matrix(A)  # unannotated: A's eltype is whatever the map produced
+end
+
+marginal_log_prior(p::AbstractStructuralPrior, θ::AbstractVector) =
+    sum(logpdf(d, θ[k]) for (k, d) in enumerate(marginals(p)); init = 0.0)
+
+extra_log_prior(p::StructuralPrior, θ::AbstractVector, A::AbstractMatrix) = 0.0
+extra_log_prior(p::ParametricStructuralPrior, θ::AbstractVector, A::AbstractMatrix) =
+    isempty(p.extra_logprior) ? 0.0 : sum(g(θ, A) for g in p.extra_logprior)
+
+draw_A(prior::AbstractStructuralPrior, rng::Random.AbstractRNG) =
+    theta_to_A(prior, draw_theta(prior, rng))
 
 """
     log_likelihood_weight(
@@ -128,11 +253,13 @@ where ``\\hat\\Omega_T`` (`Σ̂`) is the reduced-form MLE residual covariance,
 applied to the transformed dependent variable ``a_i'y_t``, via
 ``X'y_i(A)=X'Y\\cdot a_i``, ``y_i(A)'y_i(A)=a_i'Y'Ya_i``. Returns
 `(logw, posts)`, `posts[i]` the per-equation posterior so that a `(B,D)\\mid A`
-draw reuses it directly rather than recomputing it. Internal; called by
-`draw_candidate`.
+draw reuses it directly rather than recomputing it. ``A``'s element type is
+deliberately independent of the prior's — everything here promotes — so a
+`ForwardDiff.Dual`-valued ``A`` can meet `Float64` prior/data arguments.
+Internal; called by `evaluate_candidate`.
 """
 function log_likelihood_weight(
-    A::AbstractMatrix{T},
+    A::AbstractMatrix{S},
     m::Vector{<:AbstractVector{T}},
     M::Vector{<:AbstractMatrix{T}},
     κ::Vector{T},
@@ -140,7 +267,7 @@ function log_likelihood_weight(
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
     obs::Int,
-) where {T<:Real}
+) where {S<:Real,T<:Real}
     n = size(A, 1)
     logw = (obs / 2) * logdet(Symmetric(A * Σ̂ * A'))
     posts = Vector{NamedTuple}(undef, n)
@@ -158,31 +285,37 @@ function log_likelihood_weight(
 end
 
 """
-    draw_candidate(
+    evaluate_candidate(
         prior::HamiltonStructuralPrior,
+        θ::AbstractVector,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
         obs::Int,
         rng::Random.AbstractRNG,
     )
 
-Draws one candidate structural triple ``(A,B,D)``: ``A`` from
-`prior.A_prior`'s component priors, then ``(B,D)\\mid A`` from the exact
-conjugate posterior (`log_likelihood_weight`), then adds every joint
-restriction in `prior.A_prior.restrictions`. Returns `(A, B, d, logw)`, `d`
-the diagonal of `D`. Internal; the shared draw step of both
-`sample_structural_sir` and `sample_structural_mh`.
+Scores an *already drawn* parameter vector `θ`: maps it to ``A``
+(`theta_to_A`), draws ``(B,D)\\mid A`` from the exact conjugate posterior
+(`log_likelihood_weight`), then adds every extra log-prior term on
+``(\\theta,A)`` and every joint restriction in `prior.A_prior.restrictions`.
+Returns `(A, B, d, logw)`, `d` the diagonal of `D`. Split out from
+`draw_candidate` so a sampler that proposes ``\\theta`` itself (a random-walk
+chain) can reuse the identical weight; internal.
 """
-function draw_candidate(
+function evaluate_candidate(
     prior::HamiltonStructuralPrior{T},
+    θ::AbstractVector,
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
     obs::Int,
     rng::Random.AbstractRNG,
 ) where {T<:Real}
     rf = prior.reduced_form
-    A = draw_A(prior.A_prior, rng)
+    A = theta_to_A(prior.A_prior, θ)
     logw, posts = log_likelihood_weight(A, rf.m, rf.M, rf.κ, prior.Ŝ, gram, Σ̂, obs)
+    # Extra log-prior terms on (θ,A) never cancel from any acceptance ratio,
+    # unlike the marginal θ priors the independence proposal draws from.
+    logw += extra_log_prior(prior.A_prior, θ, A)
     n = rf.vars
     k = length(rf.m[1])
     B = Matrix{T}(undef, k, n)
@@ -196,6 +329,37 @@ function draw_candidate(
     end
     return A, B, d, logw
 end
+
+"""
+    draw_candidate(
+        prior::HamiltonStructuralPrior,
+        gram::NamedTuple,
+        Σ̂::AbstractMatrix,
+        obs::Int,
+        rng::Random.AbstractRNG,
+    )
+
+Draws one candidate structural triple ``(A,B,D)``: ``\\theta`` from
+`prior.A_prior`'s marginal priors (its component priors on ``A``'s free
+entries, or its priors on the economic parameters), then scores it with
+`evaluate_candidate`. Returns `(A, B, d, logw)`, `d` the diagonal of `D`.
+Internal; the shared draw step of both `sample_structural_sir` and
+`sample_structural_mh`.
+"""
+draw_candidate(
+    prior::HamiltonStructuralPrior{T},
+    gram::NamedTuple,
+    Σ̂::AbstractMatrix{T},
+    obs::Int,
+    rng::Random.AbstractRNG,
+) where {T<:Real} = evaluate_candidate(
+    prior,
+    draw_theta(prior.A_prior, rng),
+    gram,
+    Σ̂,
+    obs,
+    rng,
+)
 
 """
     sample_structural_sir(
