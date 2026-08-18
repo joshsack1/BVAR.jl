@@ -491,13 +491,259 @@ function sample_structural_mh(
 end
 
 """
+    sample_structural_rwmh(
+        prior::HamiltonStructuralPrior,
+        gram::NamedTuple,
+        Σ̂::AbstractMatrix,
+        obs::Int,
+        include_constant::Bool;
+        ndraws::Int = 1000,
+        rng::Random.AbstractRNG = Random.default_rng(),
+        burn_in::Int = ndraws,
+        θ₀::Union{Nothing,AbstractVector} = nothing,
+        proposal_scale::Union{Nothing,AbstractMatrix} = nothing,
+        ξ::Real = 1.0,
+        proposal_df::Real = 2.0,
+    )
+
+Draws `ndraws` samples of ``(A,B,D)`` via Baumeister & Hamilton (2019,
+AER)'s own algorithm: a random-walk Metropolis-Hastings chain on the
+marginal posterior of ``\\theta`` (their eq. 12, ``B,D`` integrated out),
+with the paper's fat-tailed proposal
+
+``\\theta' = \\theta + \\sqrt{\\xi}\\,L z/\\sqrt{u/\\nu}, \\qquad
+z\\sim N(0,I_c),\\; u\\sim\\chi^2_\\nu,``
+
+a multivariate Student-``t`` with ``\\nu = `` `proposal_df` degrees of
+freedom (their choice: 2) and scale ``\\xi\\cdot`` `proposal_scale`
+(``L`` its Cholesky factor) — one shared mixing variable ``u`` per proposal,
+so the step is a genuine multivariate ``t``, and symmetric, so the proposal
+density cancels from the acceptance ratio. What does *not* cancel here —
+unlike in `sample_structural_mh`, whose candidates are drawn from the prior
+itself — is the marginal prior of ``\\theta``: the acceptance ratio is
+``(\\text{loglik} + \\ln p(\\theta))_{\\text{prop}} - (\\cdot)_{\\text{cur}}``,
+with `extra_logprior` terms and restrictions inside the first factor as
+always. Restrictions that depend on the per-iteration ``B`` draw keep the
+same pseudo-marginal semantics as `sample_structural_mh` (the current
+state's weight is recycled until the next acceptance).
+
+By default (`proposal_scale = nothing`) the proposal is tuned the way the
+paper tunes it: `tune_rwmh_proposal` maximizes the marginal log posterior
+from `θ₀` (or the marginals' medians) and the chain starts at the mode with
+`proposal_scale` set to the inverse Hessian there. Supplying
+`proposal_scale` (with or without `θ₀`) skips tuning entirely. `ξ` is the
+paper's hand-tuned step multiplier: shrink it if the `acceptance_rate`
+diagnostic is far below their 30-35% target, grow it if far above; the
+posterior covariance of the returned `θ` draws is the natural
+`proposal_scale` for a retuned second run.
+
+Prefer this over `sample_structural_mh` when the independence chain's
+acceptance rate collapses — its whole-``A``-at-once prior draws are accepted
+ever more rarely as the number of free parameters grows, while a local
+random walk keeps moving — and for full B&H replication with a
+`ParametricStructuralPrior`. Returns `(draws::StructuralDraws,
+diagnostics::NamedTuple)` with `diagnostics = (acceptance_rate = ..., θ =
+...)`, `θ` the `ndraws × c` matrix of post-burn-in ``\\theta`` draws in
+canonical order (`free_indices` order for a `StructuralPrior`, `θ_prior`
+order for a `ParametricStructuralPrior`). Internal; called by the public
+`sample_structural(prior, est; ...)` entry point.
+"""
+function sample_structural_rwmh(
+    prior::HamiltonStructuralPrior{T},
+    gram::NamedTuple,
+    Σ̂::AbstractMatrix{T},
+    obs::Int,
+    include_constant::Bool;
+    ndraws::Int = 1000,
+    rng::Random.AbstractRNG = Random.default_rng(),
+    burn_in::Int = ndraws,
+    θ₀::Union{Nothing,AbstractVector} = nothing,
+    proposal_scale::Union{Nothing,AbstractMatrix} = nothing,
+    ξ::Real = 1.0,
+    proposal_df::Real = 2.0,
+) where {T<:Real}
+    @assert ndraws > 0 "ndraws must be positive"
+    @assert burn_in >= 0 "burn_in must be non-negative"
+    @assert ξ > 0 "ξ must be positive"
+    @assert proposal_df > 0 "proposal_df must be positive"
+    c = nparams(prior.A_prior)
+    @assert c > 0 "the structural prior has no free parameters, so a random-walk chain has nothing to move; use method = :mh or :sir, which reduce to the fixed-A path"
+    θ_cur = θ₀ === nothing ? median.(marginals(prior.A_prior)) : collect(float.(θ₀))
+    @assert length(θ_cur) == c "θ₀ must have one entry per free parameter (got $(length(θ_cur)), expected $c)"
+    local scale
+    if proposal_scale === nothing
+        θ_cur, scale = tune_rwmh_proposal(prior, gram, Σ̂, obs, θ_cur)
+    else
+        @assert size(proposal_scale) == (c, c) "proposal_scale must be $c×$c (one row/column per free parameter; got $(size(proposal_scale)))"
+        scale = proposal_scale
+    end
+    scale_sym = Symmetric(Matrix(scale))
+    @assert isposdef(scale_sym) "proposal_scale must be positive definite"
+    L = cholesky(scale_sym).L
+    A_cur, B_cur, d_cur, logw_cur = evaluate_candidate(prior, θ_cur, gram, Σ̂, obs, rng)
+    lp_cur = marginal_log_prior(prior.A_prior, θ_cur)
+    @assert isfinite(logw_cur + lp_cur) "the log posterior is not finite at the chain's starting point; supply a θ₀ inside every marginal prior's support that satisfies every restriction"
+    total = burn_in + ndraws
+    As = Vector{Matrix{T}}(undef, ndraws)
+    Bs = Vector{Matrix{T}}(undef, ndraws)
+    ds = Vector{Vector{T}}(undef, ndraws)
+    θs = Matrix{Float64}(undef, ndraws, c)
+    naccept = 0
+    for iter in 1:total
+        θ_prop =
+            θ_cur .+
+            (sqrt(ξ) .* (L * randn(rng, c))) ./ sqrt(rand(rng, Chisq(proposal_df)) / proposal_df)
+        lp_prop = marginal_log_prior(prior.A_prior, θ_prop)
+        # Only score proposals inside the marginals' support: outside it the
+        # θ → A map itself can be undefined (e.g. B&H's -1/χ transform).
+        if isfinite(lp_prop)
+            A_prop, B_prop, d_prop, logw_prop =
+                evaluate_candidate(prior, θ_prop, gram, Σ̂, obs, rng)
+            # The marginal prior no longer cancels (the proposal is not the
+            # prior, unlike sample_structural_mh); the symmetric t step
+            # contributes nothing.
+            if log(rand(rng)) < (logw_prop + lp_prop) - (logw_cur + lp_cur)
+                θ_cur, A_cur, B_cur, d_cur = θ_prop, A_prop, B_prop, d_prop
+                logw_cur, lp_cur = logw_prop, lp_prop
+                naccept += 1
+            end
+        end
+        if iter > burn_in
+            As[iter - burn_in] = A_cur
+            Bs[iter - burn_in] = B_cur
+            ds[iter - burn_in] = d_cur
+            θs[iter - burn_in, :] = θ_cur
+        end
+    end
+    draws = StructuralDraws(
+        As,
+        Bs,
+        ds,
+        prior.reduced_form.lags,
+        prior.reduced_form.vars,
+        prior.reduced_form.names,
+        include_constant,
+    )
+    return draws, (acceptance_rate = naccept / total, θ = θs)
+end
+
+# Internal core of structural_log_posterior, taking the same precomputed
+# blocks the samplers carry so sample_structural_rwmh's tuner can call it
+# without a VARestimate in hand.
+function structural_log_posterior(
+    prior::HamiltonStructuralPrior{T},
+    gram::NamedTuple,
+    Σ̂::AbstractMatrix{T},
+    obs::Int,
+) where {T<:Real}
+    rf = prior.reduced_form
+    A_prior = prior.A_prior
+    return function (θ::AbstractVector)
+        lp = marginal_log_prior(A_prior, θ)
+        # Out of the marginals' support: return before calling the map, whose
+        # transforms (e.g. Baumeister & Hamilton's -1/χ) can be undefined there.
+        isfinite(lp) || return -Inf
+        A = theta_to_A(A_prior, θ)
+        logw, posts = log_likelihood_weight(A, rf.m, rf.M, rf.κ, prior.Ŝ, gram, Σ̂, obs)
+        logw += extra_log_prior(A_prior, θ, A)
+        if !isempty(A_prior.restrictions)
+            B̄ = reduce(hcat, (posts[i].b̄ for i in 1:rf.vars))
+            for r in A_prior.restrictions
+                logw += r(A, B̄)
+            end
+        end
+        return lp + logw
+    end
+end
+
+"""
+    structural_log_posterior(prior::HamiltonStructuralPrior, est::VARestimate)
+
+Returns a deterministic closure ``\\theta \\to \\ln p(\\theta\\mid Y_T)`` (up
+to a constant): Baumeister & Hamilton (2019, AER)'s marginal posterior of the
+structural parameters (their eq. 12) — the collapsed likelihood
+(`log_likelihood_weight`, ``B,D`` integrated out) plus the marginal log prior
+of ``\\theta`` plus any `extra_logprior` terms, with each joint restriction
+``r(A,B)`` evaluated at the *conditional posterior mean* ``\\bar B(A)`` rather
+than at a random ``B`` draw. It is therefore the exact `method = :rwmh`
+target when no restriction depends on ``B`` (the common case — short-run,
+sign, and determinant restrictions touch ``A`` alone), and a deterministic
+approximation otherwise. Returns ``-\\infty`` outside the marginals' support
+without evaluating the ``\\theta\\to A`` map.
+
+The closure is `ForwardDiff`-differentiable, which is how
+`sample_structural`'s default `:rwmh` tuning uses it (mode-finding plus
+inverse-Hessian proposal scaling, the package's analogue of the paper's
+`fminunc` step); it is exported so the same tuning can be done by hand with
+any optimizer — maximize the closure, then pass the mode and (scaled) inverse
+Hessian to `sample_structural` as `θ₀` and `proposal_scale`.
+"""
+function structural_log_posterior(
+    prior::HamiltonStructuralPrior,
+    est::VARestimate,
+)
+    @assert prior.reduced_form.lags == est.lags && prior.reduced_form.vars == est.vars "prior and est must come from the same model specification (matching lags/vars)"
+    return structural_log_posterior(prior, gram_blocks(est), est.Σ, est.obs)
+end
+
+# Baumeister & Hamilton (2019)'s proposal-tuning step for the random-walk
+# sampler: maximize the marginal log posterior from θ₀ (BFGS, ForwardDiff
+# gradients) and return (mode, inverse Hessian there) as the proposal's
+# location and scale. Mirrors their fminunc guard: whenever optimization
+# fails, its optimum is not finite, or the inverse Hessian is not positive
+# definite, fall back to (θ₀, an IQR-based diagonal) with a warning — IQR
+# rather than var because the marginals may be fat-tailed (var(TDist(ν ≤ 2))
+# is infinite) or Truncated (no var method).
+function tune_rwmh_proposal(
+    prior::HamiltonStructuralPrior{T},
+    gram::NamedTuple,
+    Σ̂::AbstractMatrix{T},
+    obs::Int,
+    θ₀::AbstractVector,
+) where {T<:Real}
+    logpost = structural_log_posterior(prior, gram, Σ̂, obs)
+    @assert isfinite(logpost(θ₀)) "the log posterior is not finite at the tuner's starting point θ₀ = $θ₀; supply a θ₀ inside the marginal priors' support that satisfies every restriction"
+    # normal-consistent IQR-based scale: (IQR/1.349)² per marginal
+    fallback =
+        Diagonal([((quantile(d, 0.75) - quantile(d, 0.25)) / 1.349)^2 for d in marginals(prior.A_prior)])
+    neg(θ) = -logpost(θ)
+    # explicit ForwardDiff gradient (Optim ≥ 2 takes ADTypes objects, not
+    # :forward, for its autodiff kwarg; this sidesteps a third dependency)
+    neg_grad!(G, θ) = copyto!(G, ForwardDiff.gradient(neg, θ))
+    result = try
+        Optim.optimize(neg, neg_grad!, float.(collect(θ₀)), Optim.BFGS())
+    catch err
+        @warn "proposal tuning failed to optimize the marginal log posterior; falling back to θ₀ and an IQR-based diagonal proposal scale" exception = err
+        return collect(float.(θ₀)), fallback
+    end
+    mode = Optim.minimizer(result)
+    if !isfinite(Optim.minimum(result))
+        @warn "proposal tuning did not find a finite posterior optimum; falling back to θ₀ and an IQR-based diagonal proposal scale"
+        return collect(float.(θ₀)), fallback
+    end
+    Optim.converged(result) ||
+        @warn "proposal tuning's BFGS run did not converge; using its best point anyway"
+    H = Symmetric(ForwardDiff.hessian(neg, mode))
+    if !all(isfinite, H) || !isposdef(H)
+        @warn "the Hessian of the negative log posterior at the mode is not positive definite; keeping the mode but falling back to an IQR-based diagonal proposal scale"
+        return mode, fallback
+    end
+    return mode, inv(H)
+end
+
+"""
     sample_structural(
         prior::HamiltonStructuralPrior,
         est::VARestimate;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
         method::Symbol = :mh,
-        kwargs...,
+        burn_in::Int = ndraws,
+        oversample::Int = 10,
+        θ₀::Union{Nothing,AbstractVector} = nothing,
+        proposal_scale::Union{Nothing,AbstractMatrix} = nothing,
+        ξ::Real = 1.0,
+        proposal_df::Real = 2.0,
     )
 
 Draws `ndraws` samples of the structural triple ``(A,B,D)`` from the
@@ -508,26 +754,46 @@ Baumeister & Hamilton (2019, AER)'s marginal posterior of ``A`` (their eq.
 ``p(A\\mid Y_T) \\propto p(A)\\,\\frac{\\big[\\det(A\\hat\\Omega_TA')\\big]^{T/2}}
 {\\prod_i\\big[(2/T)\\tau_i^*(A)\\big]^{\\kappa_i^*}}\\,\\prod_i \\tau_i(A)^{\\kappa_i}.``
 
-Candidate ``A``'s are drawn from `prior.A_prior`'s component priors — which
-are exactly the ``p(A)`` factor above restricted to `A_prior`'s free entries
-— so that factor cancels out of both the importance weight (`method =
-:sir`) and the Metropolis-Hastings acceptance ratio (`method = :mh`, the
-default), leaving only the likelihood ratio above (`log_likelihood_weight`)
-and any nonlinear `A_prior.restrictions`; ``B,D\\mid A`` are then drawn from
-the exact conjugate posterior, which cancels the same way. This holds
-regardless of whether a restriction depends on ``A`` alone (short-run/sign)
-or on ``(A,B)`` jointly (long-run) — one uniform mechanism handles all three.
+Under `method = :sir` and `method = :mh` (the default), candidate
+``\\theta``'s (``A``'s free entries, or a `ParametricStructuralPrior`'s
+economic parameters) are drawn from `prior.A_prior`'s marginal priors —
+which are exactly the ``p(A)`` factor above — so that factor cancels out of
+both the importance weight (`:sir`) and the Metropolis-Hastings acceptance
+ratio (`:mh`), leaving only the likelihood ratio above
+(`log_likelihood_weight`), any `extra_logprior` terms, and any nonlinear
+`A_prior.restrictions`; ``B,D\\mid A`` are then drawn from the exact
+conjugate posterior, which cancels the same way. This holds regardless of
+whether a restriction depends on ``A`` alone (short-run/sign) or on
+``(A,B)`` jointly (long-run) — one uniform mechanism handles all three.
 
-`method = :mh` (default) is the more robust choice: both methods share
+`method = :mh` (default) is the more robust of those two: both share
 essentially the same per-candidate cost, but `:sir`'s failure mode
 (importance-weight collapse — a real risk here, since the posterior's
 ``T/2`` exponent is steep) can go unnoticed unless the returned `ess`
 diagnostic is checked, whereas `:mh`'s failure mode (a low
 `acceptance_rate`) is immediately visible. `:sir` is provided for direct
 comparison against the paper's own (importance-sampling-based) algorithm.
-`kwargs` are forwarded to the chosen method (`oversample` for `:sir`,
-`burn_in` for `:mh`). Returns `(draws::StructuralDraws,
-diagnostics::NamedTuple)`.
+
+`method = :rwmh` is the paper's own baseline algorithm
+(`sample_structural_rwmh`): a random walk on the collapsed posterior of
+``\\theta`` with a fat-tailed multivariate Student-``t`` step
+(`proposal_df` degrees of freedom, the paper's 2 by default), so ``p(A)`` no
+longer cancels and enters the acceptance ratio explicitly. By default the
+proposal is tuned as the paper tunes it — the chain starts at the posterior
+mode with scale ``\\xi\\cdot`` (inverse Hessian there), found by BFGS with
+`ForwardDiff` gradients through `structural_log_posterior` — and both pieces
+can be overridden via `θ₀` and `proposal_scale`. Follow the paper's advice
+on `ξ`: adjust it until `acceptance_rate` lands near 30-35%. Prefer `:rwmh`
+when `:mh`'s acceptance rate collapses (its whole-``A``-at-once prior draws
+are accepted ever more rarely as free parameters multiply) and for full B&H
+replication with a `ParametricStructuralPrior`.
+
+Keywords by method — those a method does not consume are silently ignored:
+`ndraws` and `rng` (all methods), `oversample` (`:sir`), `burn_in` (`:mh`,
+`:rwmh`), `θ₀`/`proposal_scale`/`ξ`/`proposal_df` (`:rwmh`). Returns
+`(draws::StructuralDraws, diagnostics::NamedTuple)` — `ess` for `:sir`,
+`acceptance_rate` for `:mh`, `acceptance_rate` and the post-burn-in `θ`
+draws for `:rwmh`.
 """
 function sample_structural(
     prior::HamiltonStructuralPrior,
@@ -535,23 +801,55 @@ function sample_structural(
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
     method::Symbol = :mh,
-    kwargs...,
+    burn_in::Int = ndraws,
+    oversample::Int = 10,
+    θ₀::Union{Nothing,AbstractVector} = nothing,
+    proposal_scale::Union{Nothing,AbstractMatrix} = nothing,
+    ξ::Real = 1.0,
+    proposal_df::Real = 2.0,
 )
     @assert prior.reduced_form.lags == est.lags && prior.reduced_form.vars == est.vars "prior and est must come from the same model specification (matching lags/vars)"
-    @assert method in (:sir, :mh) "method must be :sir or :mh"
+    @assert method in (:sir, :mh, :rwmh) "method must be :sir, :mh, or :rwmh"
     gram = gram_blocks(est)
     Σ̂ = est.Σ
-    sampler = method == :sir ? sample_structural_sir : sample_structural_mh
-    return sampler(
-        prior,
-        gram,
-        Σ̂,
-        est.obs,
-        est.include_constant;
-        ndraws = ndraws,
-        rng = rng,
-        kwargs...,
-    )
+    if method == :sir
+        return sample_structural_sir(
+            prior,
+            gram,
+            Σ̂,
+            est.obs,
+            est.include_constant;
+            ndraws = ndraws,
+            rng = rng,
+            oversample = oversample,
+        )
+    elseif method == :mh
+        return sample_structural_mh(
+            prior,
+            gram,
+            Σ̂,
+            est.obs,
+            est.include_constant;
+            ndraws = ndraws,
+            rng = rng,
+            burn_in = burn_in,
+        )
+    else
+        return sample_structural_rwmh(
+            prior,
+            gram,
+            Σ̂,
+            est.obs,
+            est.include_constant;
+            ndraws = ndraws,
+            rng = rng,
+            burn_in = burn_in,
+            θ₀ = θ₀,
+            proposal_scale = proposal_scale,
+            ξ = ξ,
+            proposal_df = proposal_df,
+        )
+    end
 end
 
 """
