@@ -235,7 +235,7 @@ draw_A(prior::AbstractStructuralPrior, rng::Random.AbstractRNG) =
         Ŝ::AbstractMatrix,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
-        obs::Int,
+        obs::Real,
     )
 
 Computes Baumeister & Hamilton (2019, AER)'s marginal (quasi-)likelihood of
@@ -266,7 +266,7 @@ function log_likelihood_weight(
     Ŝ::AbstractMatrix{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
 ) where {S<:Real,T<:Real}
     n = size(A, 1)
     # Hoisted out of the loop so the Union split on the A-dependent-mean case
@@ -316,7 +316,7 @@ end
         θ::AbstractVector,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
-        obs::Int,
+        obs::Real,
         rng::Random.AbstractRNG,
     )
 
@@ -333,7 +333,7 @@ function evaluate_candidate(
     θ::AbstractVector,
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
     rng::Random.AbstractRNG,
 ) where {T<:Real}
     rf = prior.reduced_form
@@ -369,7 +369,7 @@ end
         prior::HamiltonStructuralPrior,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
-        obs::Int,
+        obs::Real,
         rng::Random.AbstractRNG,
     )
 
@@ -384,7 +384,7 @@ draw_candidate(
     prior::HamiltonStructuralPrior{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
     rng::Random.AbstractRNG,
 ) where {T<:Real} = evaluate_candidate(
     prior,
@@ -400,7 +400,7 @@ draw_candidate(
         prior::HamiltonStructuralPrior,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
-        obs::Int,
+        obs::Real,
         include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
@@ -425,7 +425,7 @@ function sample_structural_sir(
     prior::HamiltonStructuralPrior{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
@@ -465,7 +465,7 @@ end
         prior::HamiltonStructuralPrior,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
-        obs::Int,
+        obs::Real,
         include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
@@ -486,7 +486,7 @@ function sample_structural_mh(
     prior::HamiltonStructuralPrior{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
@@ -529,7 +529,7 @@ end
         prior::HamiltonStructuralPrior,
         gram::NamedTuple,
         Σ̂::AbstractMatrix,
-        obs::Int,
+        obs::Real,
         include_constant::Bool;
         ndraws::Int = 1000,
         rng::Random.AbstractRNG = Random.default_rng(),
@@ -586,7 +586,7 @@ function sample_structural_rwmh(
     prior::HamiltonStructuralPrior{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
     include_constant::Bool;
     ndraws::Int = 1000,
     rng::Random.AbstractRNG = Random.default_rng(),
@@ -668,7 +668,7 @@ function structural_log_posterior(
     prior::HamiltonStructuralPrior{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
 ) where {T<:Real}
     rf = prior.reduced_form
     A_prior = prior.A_prior
@@ -738,7 +738,7 @@ function tune_rwmh_proposal(
     prior::HamiltonStructuralPrior{T},
     gram::NamedTuple,
     Σ̂::AbstractMatrix{T},
-    obs::Int,
+    obs::Real,
     θ₀::AbstractVector,
 ) where {T<:Real}
     logpost = structural_log_posterior(prior, gram, Σ̂, obs)
@@ -778,6 +778,154 @@ function tune_rwmh_proposal(
         return mode, fallback
     end
     return mode, inv(H)
+end
+
+"""
+    discounted_gram_blocks(est1::VARestimate, est2::VARestimate, μ::Real)
+
+Pools two subsamples' sufficient statistics under Baumeister & Hamilton (2019,
+AER)'s two-subsample discount weight ``\\mu\\in[0,1]`` (`mu = 0.5` in their
+`main_BH_AER.m`): the first subsample's likelihood enters raised to the power
+``\\mu`` — equivalently, its stacked data rows are scaled by ``\\sqrt\\mu`` —
+so each Gram block picks up exactly one factor of ``\\mu``,
+
+``X'X = \\mu X_1'X_1+X_2'X_2, \\quad X'Y = \\mu X_1'Y_1+X_2'Y_2, \\quad
+Y'Y = \\mu Y_1'Y_1+Y_2'Y_2,``
+
+and the effective sample size ``T_{\\text{eff}} = \\mu T_1+T_2`` replaces
+``T`` everywhere it appears downstream (``\\bar\\kappa_i =
+\\kappa_i+T_{\\text{eff}}/2``, the ``(T_{\\text{eff}}/2)\\ln\\det(A\\tilde\\Omega
+A')`` factor, and the ``2/T_{\\text{eff}}`` normalizer) — which is why the
+returned `obs` is a `Real` rather than an `Int`. The pooled residual covariance
+is the matching weighted average
+
+``\\tilde\\Omega = \\frac{\\mu T_1\\hat\\Sigma_1+T_2\\hat\\Sigma_2}{\\mu T_1+T_2},``
+
+where each `est.Σ` is already *that subsample's own* concentrated residual
+matrix ``\\zeta_j/T_j`` — its own OLS projection, not a pooled one — so this
+averages the two subsamples' own sums of squares. The prior blocks and
+``\\hat S`` are never discounted: ``\\mu`` weights the likelihood alone.
+
+The two subsamples may overlap, and typically should: B&H's overlap by `lags`
+rows so the second subsample's first regressands have their initial conditions.
+That is why this takes two `VARestimate`s rather than a split index. Requires
+the two to describe the same specification (matching `lags`, `vars`, `names`
+and `include_constant`) — it is the single place that check is made for the
+two-subsample entry points. Returns `(gram, Σ̂, obs)`, exactly the triple the
+structural samplers consume, computed once outside every sampling loop.
+Internal; feeds `sample_structural(prior, est1, est2; μ)` and
+`structural_log_posterior(prior, est1, est2; μ)`.
+"""
+function discounted_gram_blocks(
+    est1::VARestimate{T},
+    est2::VARestimate{T},
+    μ::Real,
+) where {T<:Real}
+    @assert isfinite(μ) && 0 <= μ <= 1 "μ must be a finite discount weight in [0, 1] (got $μ); μ = 1 pools the two subsamples, μ = 0 discards the first"
+    @assert est1.lags == est2.lags "est1 and est2 must be estimated at the same lag order (got $(est1.lags) and $(est2.lags))"
+    @assert est1.vars == est2.vars "est1 and est2 must have the same number of variables (got $(est1.vars) and $(est2.vars))"
+    @assert est1.names == est2.names "est1 and est2 must describe the same variables in the same order (got $(est1.names) and $(est2.names))"
+    @assert est1.include_constant == est2.include_constant "est1 and est2 must agree on include_constant (got $(est1.include_constant) and $(est2.include_constant)); the two subsamples' regressor blocks would otherwise have different widths"
+    μT = convert(T, μ)
+    g1 = gram_blocks(est1)
+    g2 = gram_blocks(est2)
+    obs = μT * est1.obs + est2.obs
+    # Normalized weights, not sum-then-divide: at μ = 0 this gives w2 = 1.0 and
+    # hence Σ̂ == est2.Σ bit for bit (the two-subsample call then reduces exactly
+    # to the single-est call on est2), and at μ = 1 with identical subsamples it
+    # gives w1 = w2 = 0.5 exactly.
+    w1 = μT * est1.obs / obs
+    w2 = est2.obs / obs
+    gram = (
+        XᵀX = μT .* g1.XᵀX .+ g2.XᵀX,
+        XᵀY = μT .* g1.XᵀY .+ g2.XᵀY,
+        YᵀY = μT .* g1.YᵀY .+ g2.YᵀY,
+    )
+    Σ̂ = w1 .* est1.Σ .+ w2 .* est2.Σ
+    return (gram = gram, Σ̂ = Σ̂, obs = obs)
+end
+
+"""
+    sample_structural_blocks(
+        prior::HamiltonStructuralPrior,
+        gram::NamedTuple,
+        Σ̂::AbstractMatrix,
+        obs::Real,
+        include_constant::Bool;
+        ndraws::Int,
+        rng::Random.AbstractRNG,
+        method::Symbol,
+        burn_in::Int,
+        oversample::Int,
+        θ₀::Union{Nothing,AbstractVector},
+        proposal_scale::Union{Nothing,AbstractMatrix},
+        ξ::Real,
+        proposal_df::Real,
+    )
+
+The shared `method` dispatcher behind both public entry points — the
+single-sample `sample_structural(prior, est; ...)` and the two-subsample
+`sample_structural(prior, est1, est2; μ, ...)` — forwarding to
+`sample_structural_sir`, `sample_structural_mh` or `sample_structural_rwmh`
+whichever keywords that method consumes. Every keyword is required here: the
+defaults live in the public entry points, so the two cannot drift apart.
+Internal.
+"""
+function sample_structural_blocks(
+    prior::HamiltonStructuralPrior,
+    gram::NamedTuple,
+    Σ̂::AbstractMatrix,
+    obs::Real,
+    include_constant::Bool;
+    ndraws::Int,
+    rng::Random.AbstractRNG,
+    method::Symbol,
+    burn_in::Int,
+    oversample::Int,
+    θ₀::Union{Nothing,AbstractVector},
+    proposal_scale::Union{Nothing,AbstractMatrix},
+    ξ::Real,
+    proposal_df::Real,
+)
+    @assert method in (:sir, :mh, :rwmh) "method must be :sir, :mh, or :rwmh"
+    if method == :sir
+        return sample_structural_sir(
+            prior,
+            gram,
+            Σ̂,
+            obs,
+            include_constant;
+            ndraws = ndraws,
+            rng = rng,
+            oversample = oversample,
+        )
+    elseif method == :mh
+        return sample_structural_mh(
+            prior,
+            gram,
+            Σ̂,
+            obs,
+            include_constant;
+            ndraws = ndraws,
+            rng = rng,
+            burn_in = burn_in,
+        )
+    else
+        return sample_structural_rwmh(
+            prior,
+            gram,
+            Σ̂,
+            obs,
+            include_constant;
+            ndraws = ndraws,
+            rng = rng,
+            burn_in = burn_in,
+            θ₀ = θ₀,
+            proposal_scale = proposal_scale,
+            ξ = ξ,
+            proposal_df = proposal_df,
+        )
+    end
 end
 
 """
@@ -859,46 +1007,155 @@ function sample_structural(
 )
     @assert prior.reduced_form.lags == est.lags && prior.reduced_form.vars == est.vars "prior and est must come from the same model specification (matching lags/vars)"
     @assert method in (:sir, :mh, :rwmh) "method must be :sir, :mh, or :rwmh"
-    gram = gram_blocks(est)
-    Σ̂ = est.Σ
-    if method == :sir
-        return sample_structural_sir(
-            prior,
-            gram,
-            Σ̂,
-            est.obs,
-            est.include_constant;
-            ndraws = ndraws,
-            rng = rng,
-            oversample = oversample,
-        )
-    elseif method == :mh
-        return sample_structural_mh(
-            prior,
-            gram,
-            Σ̂,
-            est.obs,
-            est.include_constant;
-            ndraws = ndraws,
-            rng = rng,
-            burn_in = burn_in,
-        )
-    else
-        return sample_structural_rwmh(
-            prior,
-            gram,
-            Σ̂,
-            est.obs,
-            est.include_constant;
-            ndraws = ndraws,
-            rng = rng,
-            burn_in = burn_in,
-            θ₀ = θ₀,
-            proposal_scale = proposal_scale,
-            ξ = ξ,
-            proposal_df = proposal_df,
-        )
-    end
+    return sample_structural_blocks(
+        prior,
+        gram_blocks(est),
+        est.Σ,
+        est.obs,
+        est.include_constant;
+        ndraws = ndraws,
+        rng = rng,
+        method = method,
+        burn_in = burn_in,
+        oversample = oversample,
+        θ₀ = θ₀,
+        proposal_scale = proposal_scale,
+        ξ = ξ,
+        proposal_df = proposal_df,
+    )
+end
+
+"""
+    sample_structural(
+        prior::HamiltonStructuralPrior,
+        est1::VARestimate,
+        est2::VARestimate;
+        μ::Real,
+        ndraws::Int = 1000,
+        rng::Random.AbstractRNG = Random.default_rng(),
+        method::Symbol = :mh,
+        burn_in::Int = ndraws,
+        oversample::Int = 10,
+        θ₀::Union{Nothing,AbstractVector} = nothing,
+        proposal_scale::Union{Nothing,AbstractMatrix} = nothing,
+        ξ::Real = 1.0,
+        proposal_df::Real = 2.0,
+    )
+
+Draws `ndraws` samples of the structural triple ``(A,B,D)`` from *two*
+subsamples, the first one's likelihood discounted to the power ``\\mu`` —
+Baumeister & Hamilton (2019, AER)'s two-subsample weight (`mu = 0.5` in their
+`main_BH_AER.m`), the device by which an early, less trusted stretch of data
+informs the posterior only fractionally. Everything else is identical to
+`sample_structural(prior, est; ...)`, whose docstring documents the posterior,
+the three `method`s and every other keyword: the discount enters purely through
+the sufficient statistics `discounted_gram_blocks` builds, so the sampler and
+the posterior math are untouched.
+
+``\\mu`` scales `est1`'s Gram blocks once each (equivalently, its stacked data
+rows by ``\\sqrt\\mu``) and the effective sample size becomes
+``T_{\\text{eff}} = \\mu T_1+T_2``, which replaces ``T`` throughout the
+posterior. `μ = 1` pools the two subsamples with equal weight; `μ = 0` discards
+`est1` entirely and reduces *exactly* — bit for bit — to
+`sample_structural(prior, est2; ...)`. It is a required keyword with no default
+precisely so that pooling weight is always an explicit choice. The prior blocks
+and ``\\hat S`` are never discounted; ``\\mu`` weights the likelihood alone.
+
+The two subsamples may overlap, and typically should overlap by `lags` rows, so
+that the second subsample's first regressands have their initial conditions —
+as B&H's do.
+
+**The one thing no assert can check:** for a faithful B&H replication the prior
+itself — both `baumeister_hamilton_prior`'s ``\\hat\\sigma`` scales *and*
+`hamilton_structural_prior`'s ``\\hat S`` — must be built from the **first**
+subsample's ``Y``, **undiscounted**, as the paper does. `prior` arrives here
+already constructed, so a prior built from the wrong data would pass silently.
+
+Returns `(draws::StructuralDraws, diagnostics::NamedTuple)`, exactly as the
+single-sample method does. See also `structural_log_posterior(prior, est1,
+est2; μ)` for the corresponding marginal posterior closure.
+"""
+function sample_structural(
+    prior::HamiltonStructuralPrior,
+    est1::VARestimate,
+    est2::VARestimate;
+    μ::Real,
+    ndraws::Int = 1000,
+    rng::Random.AbstractRNG = Random.default_rng(),
+    method::Symbol = :mh,
+    burn_in::Int = ndraws,
+    oversample::Int = 10,
+    θ₀::Union{Nothing,AbstractVector} = nothing,
+    proposal_scale::Union{Nothing,AbstractMatrix} = nothing,
+    ξ::Real = 1.0,
+    proposal_df::Real = 2.0,
+)
+    @assert prior.reduced_form.lags == est1.lags && prior.reduced_form.vars == est1.vars "prior and est1 must come from the same model specification (matching lags/vars)"
+    @assert prior.reduced_form.lags == est2.lags && prior.reduced_form.vars == est2.vars "prior and est2 must come from the same model specification (matching lags/vars)"
+    @assert method in (:sir, :mh, :rwmh) "method must be :sir, :mh, or :rwmh"
+    blocks = discounted_gram_blocks(est1, est2, μ)
+    return sample_structural_blocks(
+        prior,
+        blocks.gram,
+        blocks.Σ̂,
+        blocks.obs,
+        est2.include_constant;
+        ndraws = ndraws,
+        rng = rng,
+        method = method,
+        burn_in = burn_in,
+        oversample = oversample,
+        θ₀ = θ₀,
+        proposal_scale = proposal_scale,
+        ξ = ξ,
+        proposal_df = proposal_df,
+    )
+end
+
+"""
+    structural_log_posterior(
+        prior::HamiltonStructuralPrior,
+        est1::VARestimate,
+        est2::VARestimate;
+        μ::Real,
+    )
+
+Two-subsample version of `structural_log_posterior(prior, est)`: the same
+deterministic closure ``\\theta\\to\\ln p(\\theta\\mid Y_T)`` (up to a
+constant), with the first subsample's likelihood discounted to the power
+``\\mu`` — Baumeister & Hamilton (2019, AER)'s two-subsample weight (`mu = 0.5`
+in their `main_BH_AER.m`). ``\\mu`` scales `est1`'s Gram blocks once each
+(equivalently, its stacked data rows by ``\\sqrt\\mu``, see
+`discounted_gram_blocks`) and the effective sample size becomes
+``T_{\\text{eff}} = \\mu T_1+T_2``, replacing ``T`` throughout the posterior.
+`μ = 1` pools the two subsamples with equal weight; `μ = 0` discards `est1` and
+reduces *exactly* to `structural_log_posterior(prior, est2)`. It is a required
+keyword with no default so that pooling weight is always an explicit choice.
+The prior blocks and ``\\hat S`` are never discounted; ``\\mu`` weights the
+likelihood alone. The two subsamples may overlap, and typically should overlap
+by `lags` rows so the second subsample's first regressands have their initial
+conditions — as B&H's do.
+
+**The one thing no assert can check:** for a faithful B&H replication the prior
+itself — both `baumeister_hamilton_prior`'s ``\\hat\\sigma`` scales *and*
+`hamilton_structural_prior`'s ``\\hat S`` — must be built from the **first**
+subsample's ``Y``, **undiscounted**, as the paper does. `prior` arrives here
+already constructed, so a prior built from the wrong data would pass silently.
+
+The closure is `ForwardDiff`-differentiable exactly as the single-sample one
+is, so it can be used for by-hand tuning of `sample_structural(prior, est1,
+est2; μ, method = :rwmh)`.
+"""
+function structural_log_posterior(
+    prior::HamiltonStructuralPrior,
+    est1::VARestimate,
+    est2::VARestimate;
+    μ::Real,
+)
+    @assert prior.reduced_form.lags == est1.lags && prior.reduced_form.vars == est1.vars "prior and est1 must come from the same model specification (matching lags/vars)"
+    @assert prior.reduced_form.lags == est2.lags && prior.reduced_form.vars == est2.vars "prior and est2 must come from the same model specification (matching lags/vars)"
+    blocks = discounted_gram_blocks(est1, est2, μ)
+    return structural_log_posterior(prior, blocks.gram, blocks.Σ̂, blocks.obs)
 end
 
 """

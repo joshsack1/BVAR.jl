@@ -224,7 +224,7 @@ end
         XᵀX::AbstractMatrix,
         Xᵀy::AbstractVector,
         yᵀy::Real,
-        obs::Int,
+        obs::Real,
     )
 
 Closed-form posterior of a single equation ``y=Xb+\\varepsilon``,
@@ -249,7 +249,7 @@ function equation_normal_gamma_posterior(
     XᵀX::AbstractMatrix,
     Xᵀy::AbstractVector,
     yᵀy::Real,
-    obs::Int,
+    obs::Real,
 )
     M_inv = inv(M)
     P = M_inv + XᵀX

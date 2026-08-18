@@ -507,6 +507,173 @@ end
     @test length(draws.A) == 1000
 end
 
+@testset "two-subsample μ = 0 collapses exactly to the second subsample" begin
+    n = length(end_vec_p)
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    lp12 = structural_log_posterior(prior, est1, est2; μ = 0.0)
+    lp2 = structural_log_posterior(prior, est2)
+    for θ in ([-0.5], [0.0], [0.7])
+        @test lp12(θ) == lp2(θ)
+    end
+
+    draws_12, diag_12 = sample_structural(
+        prior, est1, est2;
+        μ = 0.0, ndraws = 500, rng = Xoshiro(3), method = :mh,
+    )
+    draws_2, diag_2 =
+        sample_structural(prior, est2; ndraws = 500, rng = Xoshiro(3), method = :mh)
+    @test draws_12.A == draws_2.A
+    @test draws_12.B == draws_2.B
+    @test draws_12.D == draws_2.D
+    @test diag_12.acceptance_rate == diag_2.acceptance_rate
+end
+
+@testset "two-subsample μ = 1 with identical subsamples doubles the sample exactly" begin
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    blocks = BayesianVectorAutoregressions.discounted_gram_blocks(est_p, est_p, 1.0)
+    @test blocks.Σ̂ == est_p.Σ
+    @test blocks.gram.XᵀX == 2 .* gram.XᵀX
+    @test blocks.gram.XᵀY == 2 .* gram.XᵀY
+    @test blocks.gram.YᵀY == 2 .* gram.YᵀY
+    @test blocks.obs == 2 * est_p.obs
+end
+
+@testset "discounted_gram_blocks implements the BH weighting at interior μ" begin
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    μ = 0.25
+    g1 = BayesianVectorAutoregressions.gram_blocks(est1)
+    g2 = BayesianVectorAutoregressions.gram_blocks(est2)
+    blocks = BayesianVectorAutoregressions.discounted_gram_blocks(est1, est2, μ)
+    @test blocks.gram.XᵀX ≈ μ .* g1.XᵀX .+ g2.XᵀX
+    @test blocks.gram.XᵀY ≈ μ .* g1.XᵀY .+ g2.XᵀY
+    @test blocks.gram.YᵀY ≈ μ .* g1.YᵀY .+ g2.YᵀY
+    @test blocks.obs == μ * est1.obs + est2.obs
+    # Ω̃ = (μζ₁ + ζ₂)/(μT₁ + T₂) with ζⱼ = Tⱼ·Σ̂ⱼ — the unnormalized form of
+    # main_BH_AER.m:224, written independently of the implementation's
+    # normalized weights.
+    Ω̃ = (μ * est1.obs .* est1.Σ .+ est2.obs .* est2.Σ) ./ (μ * est1.obs + est2.obs)
+    @test blocks.Σ̂ ≈ Ω̃
+end
+
+@testset "two-subsample sampling runs under every method" begin
+    n = length(end_vec_p)
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    draws_mh, diag_mh = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 500, rng = Xoshiro(5), method = :mh,
+    )
+    @test length(draws_mh.A) == 500
+    @test diag_mh.acceptance_rate > 0
+
+    draws_sir, diag_sir = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 500, rng = Xoshiro(5), method = :sir, oversample = 20,
+    )
+    @test length(draws_sir.A) == 500
+    @test diag_sir.ess > 0
+
+    draws_rw, diag_rw = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 500, rng = Xoshiro(5), method = :rwmh,
+    )
+    @test length(draws_rw.A) == 500
+    @test 0 < diag_rw.acceptance_rate < 1
+end
+
+@testset "two-subsample guardrails" begin
+    n = length(end_vec_p)
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    for bad_μ in (-0.1, 1.5, NaN)
+        @test_throws AssertionError sample_structural(
+            prior, est1, est2;
+            μ = bad_μ, ndraws = 10,
+        )
+        @test_throws AssertionError structural_log_posterior(
+            prior, est1, est2;
+            μ = bad_μ,
+        )
+    end
+
+    est1_lags = estimate_var(df_p[1:150, :], end_vec_p, 1)
+    @test_throws AssertionError sample_structural(prior, est1_lags, est2; μ = 0.5)
+    est1_nocon =
+        estimate_var(df_p[1:150, :], end_vec_p, lags_p; include_constant = false)
+    @test_throws AssertionError sample_structural(prior, est1_nocon, est2; μ = 0.5)
+    df_renamed = rename(df_p[1:150, :], :y1 => :a, :y2 => :b)
+    est1_names = estimate_var(df_renamed, [:a, :b], lags_p)
+    @test_throws AssertionError sample_structural(prior, est1_names, est2; μ = 0.5)
+    # Prior built for lags_p can't pair with two lag-1 estimates.
+    est2_lags = estimate_var(df_p[100:300, :], end_vec_p, 1)
+    @test_throws AssertionError sample_structural(prior, est1_lags, est2_lags; μ = 0.5)
+end
+
+@testset "BH-style two-subsample supply/demand block with η mean under :rwmh" begin
+    n = length(end_vec_p)
+    # BH build the prior — the σ̂ scales and Ŝ — from the first subsample only,
+    # then discount that subsample's likelihood; the windows overlap by `lags`
+    # rows so the second subsample's first regressands have initial conditions.
+    df_1 = df_p[1:180, :]
+    df_2 = df_p[(180 - lags_p):300, :]
+    est1 = estimate_var(df_1, end_vec_p, lags_p)
+    est2 = estimate_var(df_2, end_vec_p, lags_p)
+    Y_1 = BayesianVectorAutoregressions.get_endogenous(df_1, end_vec_p)
+    k = n * lags_p + 1
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    reduced_form = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_1, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    θ_prior = UnivariateDistribution[
+        truncated(0.2 * TDist(3) + 0.1, 0.0, Inf),
+        truncated(0.2 * TDist(3) - 0.1, -Inf, 0.0),
+    ]
+    A_map = θ -> [1.0 -θ[1]; 1.0 -θ[2]]
+    A_prior = parametric_structural_prior(θ_prior, A_map, n; names = end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_1)
+
+    draws, diag = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 2000, rng = Xoshiro(21), method = :rwmh,
+    )
+    @test 0 < diag.acceptance_rate < 1
+    @test size(diag.θ) == (2000, 2)
+    @test all(diag.θ[:, 1] .>= 0.0)
+    @test all(diag.θ[:, 2] .<= 0.0)
+end
+
 @testset "det_sign_restriction and long_run_sign_restriction" begin
     A_pos = [1.0 0.0; 0.0 1.0]  # det = 1 > 0
     A_neg = [0.0 1.0; 1.0 0.0]  # det = -1 < 0
