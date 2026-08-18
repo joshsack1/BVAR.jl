@@ -269,7 +269,12 @@ function log_likelihood_weight(
     obs::Int,
 ) where {S<:Real,T<:Real}
     n = size(A, 1)
-    logw = (obs / 2) * logdet(Symmetric(A * Σ̂ * A'))
+    # A near-singular A can make the (mathematically PSD) product numerically
+    # indefinite or exactly singular; logdet would throw a DomainError there
+    # and crash a chain mid-run. A candidate with zero density should instead
+    # carry a -Inf weight so the sampler rejects it.
+    ld, ld_sign = logabsdet(Symmetric(A * Σ̂ * A'))
+    logw = ld_sign > 0 ? (obs / 2) * ld : oftype(ld, -Inf)
     posts = Vector{NamedTuple}(undef, n)
     for i in 1:n
         aᵢ = A[i, :]
@@ -279,7 +284,14 @@ function log_likelihood_weight(
         post =
             equation_normal_gamma_posterior(m[i], M[i], κ[i], τᵢ, gram.XᵀX, Xᵀyᵢ, yᵀyᵢ, obs)
         posts[i] = post
-        logw += κ[i] * log(τᵢ) - post.κ̄ * log((2 / obs) * post.τ̄)
+        # τ and τ̄ are positive for any nondegenerate A (Ŝ and the posterior
+        # sum of squares are PSD); at a degenerate A rounding can push them to
+        # 0 or barely below, where log would throw — zero density again.
+        if τᵢ > 0 && post.τ̄ > 0
+            logw += κ[i] * log(τᵢ) - post.κ̄ * log((2 / obs) * post.τ̄)
+        else
+            logw = oftype(logw, -Inf)
+        end
     end
     return logw, posts
 end
@@ -318,6 +330,11 @@ function evaluate_candidate(
     logw += extra_log_prior(prior.A_prior, θ, A)
     n = rf.vars
     k = length(rf.m[1])
+    # A zero-density candidate (singular A, degenerate posterior scale, or a
+    # -Inf/NaN extra term) can carry posts the Gamma/MvNormal draws below
+    # would throw on, and can never be accepted or resampled anyway — reject
+    # it outright rather than drawing (B, D) | A from garbage.
+    isfinite(logw) || return A, zeros(T, k, n), zeros(T, n), T(-Inf)
     B = Matrix{T}(undef, k, n)
     d = Vector{T}(undef, n)
     for i in 1:n
@@ -327,6 +344,9 @@ function evaluate_candidate(
     for r in prior.A_prior.restrictions
         logw += r(A, B)
     end
+    # A NaN from a user restriction would silently poison :sir's softmax
+    # (maximum(logw) turns NaN); make it an explicit rejection instead.
+    isnan(logw) && (logw = T(-Inf))
     return A, B, d, logw
 end
 
@@ -579,7 +599,8 @@ function sample_structural_rwmh(
     end
     scale_sym = Symmetric(Matrix(scale))
     @assert isposdef(scale_sym) "proposal_scale must be positive definite"
-    L = cholesky(scale_sym).L
+    # ξ folded into the Cholesky factor once, not per iteration
+    Lξ = sqrt(ξ) .* cholesky(scale_sym).L
     A_cur, B_cur, d_cur, logw_cur = evaluate_candidate(prior, θ_cur, gram, Σ̂, obs, rng)
     lp_cur = marginal_log_prior(prior.A_prior, θ_cur)
     @assert isfinite(logw_cur + lp_cur) "the log posterior is not finite at the chain's starting point; supply a θ₀ inside every marginal prior's support that satisfies every restriction"
@@ -591,8 +612,7 @@ function sample_structural_rwmh(
     naccept = 0
     for iter in 1:total
         θ_prop =
-            θ_cur .+
-            (sqrt(ξ) .* (L * randn(rng, c))) ./ sqrt(rand(rng, Chisq(proposal_df)) / proposal_df)
+            θ_cur .+ (Lξ * randn(rng, c)) ./ sqrt(rand(rng, Chisq(proposal_df)) / proposal_df)
         lp_prop = marginal_log_prior(prior.A_prior, θ_prop)
         # Only score proposals inside the marginals' support: outside it the
         # θ → A map itself can be undefined (e.g. B&H's -1/χ transform).
@@ -646,13 +666,19 @@ function structural_log_posterior(
         A = theta_to_A(A_prior, θ)
         logw, posts = log_likelihood_weight(A, rf.m, rf.M, rf.κ, prior.Ŝ, gram, Σ̂, obs)
         logw += extra_log_prior(A_prior, θ, A)
+        # Zero density already — don't hand a degenerate A/B̄ to user
+        # restriction closures (long_run_multiplier would invert singular A).
+        isfinite(logw) || return -Inf
         if !isempty(A_prior.restrictions)
             B̄ = reduce(hcat, (posts[i].b̄ for i in 1:rf.vars))
             for r in A_prior.restrictions
                 logw += r(A, B̄)
             end
         end
-        return lp + logw
+        out = lp + logw
+        # NaN (e.g. from a user restriction) would wedge an optimizer or a
+        # chain; zero density is the safe reading.
+        return isnan(out) ? -Inf : out
     end
 end
 
@@ -711,9 +737,18 @@ function tune_rwmh_proposal(
     # :forward, for its autodiff kwarg; this sidesteps a third dependency)
     neg_grad!(G, θ) = copyto!(G, ForwardDiff.gradient(neg, θ))
     result = try
-        Optim.optimize(neg, neg_grad!, float.(collect(θ₀)), Optim.BFGS())
+        # iterations is Optim's own default, passed explicitly so the bound on
+        # this loop is visible here rather than inherited silently
+        Optim.optimize(
+            neg,
+            neg_grad!,
+            float.(collect(θ₀)),
+            Optim.BFGS(),
+            Optim.Options(iterations = 1000),
+        )
     catch err
-        @warn "proposal tuning failed to optimize the marginal log posterior; falling back to θ₀ and an IQR-based diagonal proposal scale" exception = err
+        err isa InterruptException && rethrow()
+        @warn "proposal tuning failed to optimize the marginal log posterior — often benign (a marginal or extra_logprior term ForwardDiff cannot differentiate), but check the exception below in case it is a bug in a user-supplied map/extra_logprior; falling back to θ₀ and an IQR-based diagonal proposal scale" exception = err
         return collect(float.(θ₀)), fallback
     end
     mode = Optim.minimizer(result)

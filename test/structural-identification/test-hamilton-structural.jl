@@ -304,6 +304,30 @@ end
     @test length(draws.A) == 1000
 end
 
+@testset "a singular A is rejected with -Inf, not a crash" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    # this map always produces a rank-1 A: A Σ̂ A′ is singular, τ degenerates,
+    # and logdet would throw a DomainError were it not guarded — the sampler
+    # must see a zero-density (-Inf) candidate instead of dying mid-chain
+    A_prior = parametric_structural_prior(
+        UnivariateDistribution[Normal(0.0, 1.0)],
+        θ -> [1.0 1.0; 1.0 1.0],
+        n;
+        names = end_vec_p,
+    )
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+    A, B, d, logw = BayesianVectorAutoregressions.evaluate_candidate(
+        prior, [0.3], gram, est_p.Σ, est_p.obs, Xoshiro(5),
+    )
+    @test logw == -Inf
+    @test size(B) == (n * est_p.lags + 1, n)
+    logpost = structural_log_posterior(prior, est_p)
+    @test logpost([0.3]) == -Inf
+end
+
 @testset ":rwmh and parametric-prior guardrails" begin
     n = length(end_vec_p)
     reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
