@@ -123,6 +123,63 @@ struct_prior = hamilton_structural_prior(rf_prior, A_prior, Y)
 typeof(struct_prior)
 ```
 
+### Prior means on the structural lag coefficients
+
+`rf_prior` above used every default, so each equation's prior mean is the random-walk mean
+(`random_walk = true`: unity on that equation's own first lag, zero elsewhere).
+[`baumeister_hamilton_prior`](@ref) supports two mutually exclusive alternatives, both requiring
+`random_walk = false` — a custom mean and the random-walk mean both specify the same quantity, so
+`random_walk = true` plus a custom `m`/`η` would be a contradiction, not an addition:
+
+- `m`, a constant prior mean vector per equation, in the regressor ordering `[constant (if any);
+  lag 1 of every variable; lag 2; …]`. This is Baumeister & Hamilton's own `main_BH_AER.m`
+  baseline: zero everywhere except ``\pm0.1`` on the first lag of the real oil price, in the
+  supply and demand equations. This page's toy data has no oil price, so the example below plants
+  the same ``\pm0.1`` pair on the first lag of `gdp` instead, purely to show the mechanics:
+
+```@example struct
+k = length(end_vars) * est.lags + 1   # [constant; lag 1 of gdp, cpi, ffr; lag 2 of ...]
+m_custom = [zeros(k) for _ in 1:length(end_vars)]
+m_custom[1][2] = 0.1     # "supply"-equation slot: +0.1 on gdp's first lag
+m_custom[2][2] = -0.1    # "demand"-equation slot: -0.1 on gdp's first lag
+
+rf_prior_m = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+    Y, est.lags, end_vars, est.include_constant;
+    random_walk = false, m = m_custom,
+)
+rf_prior_m.m[1]
+```
+
+- `η`, an ``n\times k`` matrix, makes the prior mean *``A``-dependent*, ``m_i(A) = \eta'a_i`` —
+  Baumeister & Hamilton's own construction for their KM12/KAER replications. The structural
+  random-walk prior is the special case `η[i, offset + i] = 1` with
+  `offset = include_constant ? 1 : 0`. Note the ordering caveat: this package orders regressors
+  `[constant; lag 1 of all vars; lag 2; …]`, while Baumeister & Hamilton's own MATLAB code puts the
+  constant *last* — so their canonical ``\eta = [I\ 0]`` becomes ``[0\ I\ 0]`` here.
+
+```@example struct
+offset = est.include_constant ? 1 : 0
+η_rw = zeros(length(end_vars), k)
+for i in 1:length(end_vars)
+    η_rw[i, offset + i] = 1.0
+end
+
+rf_prior_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+    Y, est.lags, end_vars, est.include_constant;
+    random_walk = false, η = η_rw,
+)
+# η's rows are the own-first-lag unit vectors, so this is algebraically the
+# same mean as rf_prior's random-walk default — only structural = true differs.
+(rf_prior_η.structural, rf_prior_η.m[1] == rf_prior.m[1])
+```
+
+!!! warning "`m` and `η` need `random_walk = false`, and are mutually exclusive"
+    `m`, `η` and `random_walk` all specify the prior mean of ``b_i``, so exactly one of
+    `random_walk = true` or a custom `m` or a custom `η` is allowed — passing a custom mean while
+    leaving `random_walk = true`, or passing both `m` and `η` together, is an assertion error.
+    Fold the own-first-lag unit entries into your own `m`/`η` by hand if you want the random-walk
+    mean *plus* extra structure.
+
 ### Parametric priors on economic parameters
 
 `structural_prior` puts an independent prior on each free entry of ``A``. Baumeister & Hamilton
@@ -247,6 +304,42 @@ s_hand, diag_hand = sample_structural(
     struct_prior_param, sd_est;
     method = :rwmh, θ₀ = θ0, proposal_scale = inv(H),
 )
+```
+
+## Two-subsample estimation with a discount weight
+
+Baumeister & Hamilton (2019) also weight two subsamples differently rather than fit on one —
+useful when an early, less-trusted stretch of data should inform the posterior only fractionally
+rather than be dropped outright. [`sample_structural`](@ref)`(prior, est1, est2; μ, ...)` and
+[`structural_log_posterior`](@ref)`(prior, est1, est2; μ)` raise the first subsample's likelihood
+to the power ``\mu \in [0, 1]`` (their own `mu = 0.5` in `main_BH_AER.m`): `μ = 1` pools the two
+subsamples with equal weight, and `μ = 0` discards the first one entirely, reducing — exactly, bit
+for bit — to the single-estimate call on `est2`. The effective sample size becomes
+``T_{\text{eff}} = \mu T_1 + T_2``, which replaces ``T`` everywhere it enters the posterior; the
+prior blocks and ``\hat S`` are never discounted, only the likelihood.
+
+`prior` must be built from the **first** subsample's `Y`, undiscounted, exactly as the paper does
+— nothing in the code can check this, since `sample_structural` only ever sees the two
+`VARestimate`s, not the data each was built from. The two subsamples may (and typically should)
+overlap by `lags` rows, so the second subsample's first regressands have the initial conditions
+they need, exactly as Baumeister & Hamilton's own two subsamples do.
+
+```@example struct
+df1 = df[1:100, :]
+df2 = df[99:end, :]   # overlaps df1 by est.lags = 2 rows, for est2's initial conditions
+est1 = estimate_var(df1, end_vars, est.lags; include_constant = true, method = :ols)
+est2 = estimate_var(df2, end_vars, est.lags; include_constant = true, method = :ols)
+Y1 = BayesianVectorAutoregressions.get_endogenous(df1, end_vars)
+
+# Built from the FIRST subsample only, per Baumeister & Hamilton's convention.
+rf_prior_1 = build_prior(df1, end_vars, est1, :hamilton_baumeister)
+struct_prior_1 = hamilton_structural_prior(rf_prior_1, A_prior, Y1)
+
+s_two, diag_two = sample_structural(
+    struct_prior_1, est1, est2;
+    μ = 0.5, ndraws = 500, rng = Xoshiro(202), method = :mh,
+)
+diag_two.acceptance_rate
 ```
 
 All three methods return a `StructuralDraws`, which [`impulse_response`](@ref) turns into an
