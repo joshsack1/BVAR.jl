@@ -1,4 +1,36 @@
 # Create a struct for the frequentist VAR estimation (stage 4)
+"""
+    VARestimate{T<:Real}
+
+Reduced-form VAR(p) estimates produced by `estimate_var` (via its two
+backends, `fit_var_ols` and `fit_var_fem`) and consumed throughout the
+Bayesian and structural stages: `build_prior` and `gram_blocks` recover the
+cross-product blocks needed for the conjugate priors, `sample_posterior`
+draws from the posterior implied by one of those priors together with a
+`VARestimate`, and `structural_log_posterior`/`sample_structural` build on it
+for the structural-identification stage.
+
+- `β_hat::Matrix{T}` — coefficient matrix, `k × vars`. Rows are ordered as
+  the constant (if `include_constant`), then lag 1 of every variable in
+  `names`, then lag 2 of every variable, and so on — not grouped by
+  variable; see [The `VARestimate` object](@ref varestimate-object) for the
+  layout in full and `lag_blocks` for slicing it into the ``\\Phi_\\ell``.
+- `Σ::Matrix{T}` — maximum-likelihood residual covariance ``\\hat\\Sigma =
+  \\varepsilon'\\varepsilon/T``, `vars × vars` (divided by `obs`, unlike `se`
+  below).
+- `se::Matrix{T}` — per-equation OLS standard errors, same shape as
+  `β_hat`: ``se_{ij} = \\sqrt{\\hat\\sigma_j^2\\left[(X'X)^{-1}\\right]_{ii}}``,
+  ``\\hat\\sigma_j^2 = \\varepsilon_j'\\varepsilon_j/(obs - k)``.
+- `XᵀX::Matrix{T}` — regressor Gram matrix, `k × k`; reused by `gram_blocks`
+  to build the conjugate posterior updates rather than recomputed from the
+  raw data.
+- `obs::Int` — effective observations `T`, after losing `lags` to initial
+  conditions.
+- `lags::Int` — lag order `p`.
+- `vars::Int` — number of endogenous variables `n`.
+- `names::Vector{Symbol}` — variable names, in `β_hat`'s column order.
+- `include_constant::Bool` — whether row 1 of `β_hat` is the constant.
+"""
 struct VARestimate{T<:Real}
     β_hat::Matrix{T}
     Σ::Matrix{T}

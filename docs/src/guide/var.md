@@ -51,21 +51,10 @@ strictly between `0` and the number of observations.
 
 ## [The `VARestimate` object](@id varestimate-object)
 
-!!! note
-    `VARestimate` carries no docstring in `src/` yet, so it does not appear in the
-    [API Reference](@ref api-var-estimation). Its fields are documented here instead.
-
-| Field | Type | Meaning |
-|:--|:--|:--|
-| `β_hat` | `Matrix{T}` | Coefficients, `k × vars`. Row layout below. |
-| `Σ` | `Matrix{T}` | Residual covariance, `vars × vars`. |
-| `se` | `Matrix{T}` | Coefficient standard errors, same shape as `β_hat`. |
-| `XᵀX` | `Matrix{T}` | Regressor Gram matrix, `k × k`. Reused by the conjugate posterior updates rather than recomputed. |
-| `obs` | `Int` | Effective observations after losing `lags` to initial conditions. |
-| `lags` | `Int` | Lag order `p`. |
-| `vars` | `Int` | Number of endogenous variables `n`. |
-| `names` | `Vector{Symbol}` | Variable names, in column order of `β_hat`. |
-| `include_constant` | `Bool` | Whether row 1 of `β_hat` is the constant. |
+`VARestimate` bundles the coefficient matrix, the residual covariance, standard errors, and the
+regressor Gram matrix together with the shape metadata (`obs`, `lags`, `vars`, `names`,
+`include_constant`) that later stages need to interpret them. See [`VARestimate`](@ref) in the
+[API Reference](@ref api-var-estimation) for the full field-by-field description.
 
 ## The coefficient row convention
 
