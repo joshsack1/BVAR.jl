@@ -32,7 +32,7 @@ alternative parameterization by an economic parameter vector.
   the corresponding equation).
 - `free::BitMatrix` — `true` where `A[i,j]` is drawn from `component[(i,j)]`.
 - `component::Dict{Tuple{Int,Int},UnivariateDistribution}` — one
-  `Distributions.jl` object per free entry (a `Truncated(dist, lo, hi)`
+  `Distributions.jl` object per free entry (a `truncated(dist, lo, hi)`
   expresses a sign or bound restriction on that entry).
 - `restrictions::Vector{<:Function}` — joint restrictions on `(A,B)`, each
   ``(A,B)\\to\\mathbb{R}`` returning an additive log-weight.
@@ -60,7 +60,7 @@ to `StructuralPrior`'s independent entry-by-entry priors. See
 description.
 
 - `θ_prior::Vector{UnivariateDistribution}` — independent marginal priors on
-  the elements of ``\\theta``, one per parameter (a `Truncated(dist, lo, hi)`
+  the elements of ``\\theta``, one per parameter (a `truncated(dist, lo, hi)`
   expresses a sign or bound restriction on that parameter).
 - `map::Function` — ``\\theta\\to A``, taking an `AbstractVector` of length
   `length(θ_prior)` to an ``n\\times n`` `AbstractMatrix`.

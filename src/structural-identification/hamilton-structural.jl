@@ -28,7 +28,7 @@ sampled) times any number of nonlinear joint restrictions on ``(A,B)``,
 Short-run zero restrictions (traditional Cholesky/recursive identification)
 are the degenerate limit where every off-diagonal entry above/below the
 diagonal is fixed; sign or bound restrictions on a single free entry are
-`Truncated(dist, lo, hi)` (Kilian & Murphy 2012-style). Restrictions that mix
+`truncated(dist, lo, hi)` (Kilian & Murphy 2012-style). Restrictions that mix
 several entries of ``A`` (e.g. ``\\det(A)``'s sign, `det_sign_restriction`) or
 that also involve ``B`` (e.g. a sign restriction on the long-run multiplier
 matrix, `long_run_sign_restriction`) go in `restrictions`, each with
@@ -101,8 +101,8 @@ construction rather than deep inside the sampler. Consumed by
 ```julia
 # Baumeister-Hamilton-style supply/demand block: two elasticities, θ = (α, β)
 θ_prior = UnivariateDistribution[
-    Truncated(TDist(3), 0.0, Inf),    # supply elasticity, sign-restricted
-    Truncated(TDist(3), -Inf, 0.0),   # demand elasticity, sign-restricted
+    truncated(TDist(3), 0.0, Inf),    # supply elasticity, sign-restricted
+    truncated(TDist(3), -Inf, 0.0),   # demand elasticity, sign-restricted
 ]
 A_map(θ) = [1.0 -θ[1]; 1.0 -θ[2]]
 prior = parametric_structural_prior(
