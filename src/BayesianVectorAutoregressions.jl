@@ -11,6 +11,8 @@ using Parameters
 using SpecialFunctions
 using Random
 using Turing
+using Optim
+using ForwardDiff
 
 # Include the data testing functions that will actually be used
 include("data-testing.jl")
@@ -42,9 +44,13 @@ export sample_posterior, BVARdraws
 
 export structural_prior,
     StructuralPrior,
+    parametric_structural_prior,
+    ParametricStructuralPrior,
+    AbstractStructuralPrior,
     hamilton_structural_prior,
     HamiltonStructuralPrior,
     sample_structural,
+    structural_log_posterior,
     StructuralDraws,
     det_sign_restriction,
     long_run_sign_restriction

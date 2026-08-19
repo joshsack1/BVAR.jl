@@ -57,9 +57,19 @@ struct AsymmetricConjugatePrior{T<:Real} <: AbstractVARPrior{T}
 end
 
 # Baumeister & Hamilton (2019, AER) reduced-form reference prior (their
-# Appendix A): independent Normal-Gamma per equation, valid at A = I;
-# `structural` is the extension point for the full A ≠ I prior once stage 7
-# (structural identification) exists.
+# Appendix A): independent Normal-Gamma per equation. `m[i]`/`M[i]`/`κ[i]`/
+# `τ[i]` are equation i's prior mean, scale, shape and rate.
+#
+# `η` (n×k, or `nothing`) makes the prior mean of the structural lag
+# coefficients depend on the rotation matrix A, mᵢ(A) = η′aᵢ with aᵢ′ = A[i,:]
+# — the paper's construction for its KM12/KAER replications, and the
+# structural random-walk prior when η's rows are the unit vectors eᵢ on each
+# equation's own first lag. `nothing` means the prior mean is the constant
+# `m[i]`, independent of A (the paper's baseline). Invariant: when η is
+# present, `m[i]` still holds the A = I evaluation η′eᵢ = row i of η, which is
+# what the A = I consumers (`log_marginal_likelihood`, `sample_posterior`) read
+# — so they need to know nothing about η. `structural` is true iff the prior
+# mean is A-dependent (η !== nothing).
 struct BaumeisterHamiltonPrior{T<:Real} <: AbstractVARPrior{T}
     m::Vector{Vector{T}}
     M::Vector{Matrix{T}}
@@ -68,6 +78,7 @@ struct BaumeisterHamiltonPrior{T<:Real} <: AbstractVARPrior{T}
     lags::Int
     vars::Int
     names::Vector{Symbol}
+    η::Union{Nothing,Matrix{T}}
     structural::Bool
 end
 
@@ -213,7 +224,7 @@ end
         XᵀX::AbstractMatrix,
         Xᵀy::AbstractVector,
         yᵀy::Real,
-        obs::Int,
+        obs::Real,
     )
 
 Closed-form posterior of a single equation ``y=Xb+\\varepsilon``,
@@ -238,7 +249,7 @@ function equation_normal_gamma_posterior(
     XᵀX::AbstractMatrix,
     Xᵀy::AbstractVector,
     yᵀy::Real,
-    obs::Int,
+    obs::Real,
 )
     M_inv = inv(M)
     P = M_inv + XᵀX

@@ -103,6 +103,577 @@ end
     @test logw_impossible == -Inf
 end
 
+@testset "parametric prior agrees with the equivalent per-entry prior" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior_entry = structural_prior(template, free, component; names = end_vec_p)
+    prior_entry = hamilton_structural_prior(reduced_form, A_prior_entry, Y_endog)
+
+    A_prior_param = parametric_structural_prior(
+        UnivariateDistribution[Normal(0.0, 1.0)],
+        θ -> [1.0 0.0; θ[1] 1.0],
+        n;
+        names = end_vec_p,
+    )
+    @test A_prior_param isa ParametricStructuralPrior
+    @test A_prior_param isa AbstractStructuralPrior
+    prior_param = hamilton_structural_prior(reduced_form, A_prior_param, Y_endog)
+    @test prior_param isa HamiltonStructuralPrior
+
+    draws_entry, _ =
+        sample_structural(prior_entry, est_p; ndraws = 4000, rng = Xoshiro(3), method = :mh)
+    draws_param, _ =
+        sample_structural(prior_param, est_p; ndraws = 4000, rng = Xoshiro(3), method = :mh)
+    mean_entry = sum(A[2, 1] for A in draws_entry.A) / length(draws_entry.A)
+    mean_param = sum(A[2, 1] for A in draws_param.A) / length(draws_param.A)
+    @test mean_entry ≈ mean_param atol = 0.2
+end
+
+@testset "extra_logprior enters the candidate weight" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    θ_prior = UnivariateDistribution[Normal(0.0, 1.0)]
+    A_map = θ -> [1.0 0.0; θ[1] 1.0]
+
+    plain = hamilton_structural_prior(
+        reduced_form,
+        parametric_structural_prior(θ_prior, A_map, n; names = end_vec_p),
+        Y_endog,
+    )
+    shifted = hamilton_structural_prior(
+        reduced_form,
+        parametric_structural_prior(
+            θ_prior,
+            A_map,
+            n;
+            extra_logprior = Function[(θ, A) -> -1.25],
+            names = end_vec_p,
+        ),
+        Y_endog,
+    )
+    impossible = hamilton_structural_prior(
+        reduced_form,
+        parametric_structural_prior(
+            θ_prior,
+            A_map,
+            n;
+            extra_logprior = Function[(θ, A) -> -Inf],
+            names = end_vec_p,
+        ),
+        Y_endog,
+    )
+
+    # identical θ and identically seeded rng: the weights differ by exactly
+    # the extra term, because the (B, d) | A draw consumes the same stream
+    θ = [0.3]
+    _, _, _, logw_plain = BayesianVectorAutoregressions.evaluate_candidate(
+        plain, θ, gram, est_p.Σ, est_p.obs, Xoshiro(5),
+    )
+    _, _, _, logw_shifted = BayesianVectorAutoregressions.evaluate_candidate(
+        shifted, θ, gram, est_p.Σ, est_p.obs, Xoshiro(5),
+    )
+    _, _, _, logw_impossible = BayesianVectorAutoregressions.evaluate_candidate(
+        impossible, θ, gram, est_p.Σ, est_p.obs, Xoshiro(5),
+    )
+    @test isfinite(logw_plain)
+    @test logw_shifted ≈ logw_plain - 1.25
+    @test logw_impossible == -Inf
+end
+
+@testset "sample_structural: :rwmh agrees with :mh and reports θ draws" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    draws_mh, _ =
+        sample_structural(prior, est_p; ndraws = 4000, rng = Xoshiro(3), method = :mh)
+    draws_rw, diag_rw =
+        sample_structural(prior, est_p; ndraws = 4000, rng = Xoshiro(3), method = :rwmh)
+
+    @test 0 < diag_rw.acceptance_rate < 1
+    @test size(diag_rw.θ) == (4000, 1)
+    # the θ diagnostic is the same object the stored A entries came from
+    @test all(diag_rw.θ[i, 1] == draws_rw.A[i][2, 1] for i in 1:4000)
+
+    mean_mh = sum(A[2, 1] for A in draws_mh.A) / length(draws_mh.A)
+    mean_rw = sum(A[2, 1] for A in draws_rw.A) / length(draws_rw.A)
+    @test mean_mh ≈ mean_rw atol = 0.2
+
+    # a user-supplied proposal_scale (with θ₀) skips tuning and still works
+    draws_us, diag_us = sample_structural(
+        prior,
+        est_p;
+        ndraws = 2000,
+        rng = Xoshiro(9),
+        method = :rwmh,
+        θ₀ = [0.0],
+        proposal_scale = fill(0.01, 1, 1),
+        ξ = 0.5,
+        proposal_df = 3.0,
+    )
+    @test 0 < diag_us.acceptance_rate < 1
+    mean_us = sum(A[2, 1] for A in draws_us.A) / length(draws_us.A)
+    @test mean_us ≈ mean_mh atol = 0.2
+end
+
+@testset ":rwmh respects a truncated component's support" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}(
+        (2, 1) => truncated(Normal(0.0, 1.0), -2.0, 0.0),
+    )
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    draws, diag =
+        sample_structural(prior, est_p; ndraws = 2000, rng = Xoshiro(7), method = :rwmh)
+    @test 0 < diag.acceptance_rate < 1
+    @test all(-2.0 <= A[2, 1] <= 0.0 for A in draws.A)
+end
+
+@testset "structural_log_posterior is finite, differentiable, and peaked" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    logpost = structural_log_posterior(prior, est_p)
+    θ_med = [median(Normal(0.0, 1.0))]
+    @test isfinite(logpost(θ_med))
+    grad = BayesianVectorAutoregressions.ForwardDiff.gradient(logpost, θ_med)
+    @test all(isfinite, grad)
+
+    # the tuner's mode beats both the starting point and a far tail point,
+    # and lands near the :sir posterior mean
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    mode, scale = BayesianVectorAutoregressions.tune_rwmh_proposal(
+        prior, gram, est_p.Σ, est_p.obs, θ_med,
+    )
+    @test logpost(mode) >= logpost(θ_med)
+    @test logpost(mode) > logpost([3.0])
+    @test isposdef(Symmetric(Matrix(scale)))
+    draws_sir, _ = sample_structural(
+        prior, est_p; ndraws = 4000, rng = Xoshiro(3), method = :sir, oversample = 20,
+    )
+    mean_sir = sum(A[2, 1] for A in draws_sir.A) / length(draws_sir.A)
+    @test mode[1] ≈ mean_sir atol = 0.2
+end
+
+@testset ":rwmh tuner falls back gracefully when optimization fails" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    # Float64(θ[1]) throws on the ForwardDiff.Dual input the tuner's BFGS
+    # gradient uses, but is harmless on the chain's Float64 draws — so the
+    # tuner must warn and fall back while sampling still succeeds.
+    A_prior = parametric_structural_prior(
+        UnivariateDistribution[Normal(0.0, 1.0)],
+        θ -> [1.0 0.0; θ[1] 1.0],
+        n;
+        extra_logprior = Function[(θ, A) -> -abs2(Float64(θ[1])) / 100],
+        names = end_vec_p,
+    )
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+    draws, diag = @test_logs (:warn, r"falling back") match_mode = :any sample_structural(
+        prior, est_p; ndraws = 1000, rng = Xoshiro(13), method = :rwmh,
+    )
+    @test 0 < diag.acceptance_rate < 1
+    @test length(draws.A) == 1000
+end
+
+@testset "a singular A is rejected with -Inf, not a crash" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    # this map always produces a rank-1 A: A Σ̂ A′ is singular, τ degenerates,
+    # and logdet would throw a DomainError were it not guarded — the sampler
+    # must see a zero-density (-Inf) candidate instead of dying mid-chain
+    A_prior = parametric_structural_prior(
+        UnivariateDistribution[Normal(0.0, 1.0)],
+        θ -> [1.0 1.0; 1.0 1.0],
+        n;
+        names = end_vec_p,
+    )
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+    A, B, d, logw = BayesianVectorAutoregressions.evaluate_candidate(
+        prior, [0.3], gram, est_p.Σ, est_p.obs, Xoshiro(5),
+    )
+    @test logw == -Inf
+    @test size(B) == (n * est_p.lags + 1, n)
+    logpost = structural_log_posterior(prior, est_p)
+    @test logpost([0.3]) == -Inf
+end
+
+@testset ":rwmh and parametric-prior guardrails" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}(
+        (2, 1) => truncated(Normal(0.0, 1.0), -2.0, 0.0),
+    )
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    # unknown method
+    @test_throws AssertionError sample_structural(prior, est_p; method = :bogus)
+    # θ₀ outside the marginal's support
+    @test_throws AssertionError sample_structural(
+        prior, est_p;
+        method = :rwmh, θ₀ = [5.0], proposal_scale = fill(0.01, 1, 1),
+    )
+    # proposal_scale of the wrong size
+    @test_throws AssertionError sample_structural(
+        prior, est_p;
+        method = :rwmh, proposal_scale = fill(0.01, 2, 2),
+    )
+    # a fully fixed A leaves a random walk nothing to move
+    A_fixed = structural_prior(
+        template,
+        falses(n, n),
+        Dict{Tuple{Int,Int},UnivariateDistribution}();
+        names = end_vec_p,
+    )
+    prior_fixed = hamilton_structural_prior(reduced_form, A_fixed, Y_endog)
+    @test_throws AssertionError sample_structural(prior_fixed, est_p; method = :rwmh)
+    # the parametric builder rejects a map with the wrong output shape
+    @test_throws AssertionError parametric_structural_prior(
+        UnivariateDistribution[Normal(0.0, 1.0)],
+        θ -> [1.0 0.0 θ[1]],
+        n,
+    )
+end
+
+@testset "BH-style supply/demand block runs end-to-end under :rwmh" begin
+    n = length(end_vec_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    # θ = (supply elasticity > 0, demand elasticity < 0), fat-tailed t priors
+    # as in Baumeister & Hamilton (2019), plus a soft prior on det(A)'s sign
+    θ_prior = UnivariateDistribution[
+        truncated(0.2 * TDist(3) + 0.1, 0.0, Inf),
+        truncated(0.2 * TDist(3) - 0.1, -Inf, 0.0),
+    ]
+    A_map = θ -> [1.0 -θ[1]; 1.0 -θ[2]]
+    A_prior = parametric_structural_prior(
+        θ_prior,
+        A_map,
+        n;
+        extra_logprior = Function[(θ, A) -> logpdf(Normal(1.0, 2.0), det(A))],
+        names = end_vec_p,
+    )
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+    draws, diag =
+        sample_structural(prior, est_p; ndraws = 2000, rng = Xoshiro(21), method = :rwmh)
+    @test 0 < diag.acceptance_rate < 1
+    @test size(diag.θ) == (2000, 2)
+    @test all(diag.θ[:, 1] .>= 0.0)
+    @test all(diag.θ[:, 2] .<= 0.0)
+    @test all(det(A) > 0 for A in draws.A)  # supply slope above demand slope
+end
+
+@testset "η prior mean with A fixed at I is bit-identical to the random-walk prior" begin
+    n = length(end_vec_p)
+    k = n * lags_p + 1
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    rf_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    rf_rw = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true,
+    )
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}()
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    prior_η = hamilton_structural_prior(rf_η, A_prior, Y_endog)
+    prior_rw = hamilton_structural_prior(rf_rw, A_prior, Y_endog)
+
+    # With every A ≡ I, mᵢ(I) = η'eᵢ = the random-walk mean exactly, and the
+    # RNG stream is identical — so the (B, D) | A draws must match bit-for-bit.
+    draws_η, _ =
+        sample_structural(prior_η, est_p; ndraws = 500, rng = Xoshiro(11), method = :mh)
+    draws_rw, _ =
+        sample_structural(prior_rw, est_p; ndraws = 500, rng = Xoshiro(11), method = :mh)
+    @test draws_η.A == draws_rw.A
+    @test draws_η.B == draws_rw.B
+    @test draws_η.D == draws_rw.D
+end
+
+@testset "η rotates the prior mean with A: exact identity against constant m" begin
+    n = length(end_vec_p)
+    k = n * lags_p + 1
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+
+    rf_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    prior_η = hamilton_structural_prior(rf_η, A_prior, Y_endog)
+    logpost_η = structural_log_posterior(prior_η, est_p)
+
+    # At a fixed θ, a constant-m prior whose m is η'aᵢ evaluated at that θ's A
+    # must give the identical log posterior — this pins the mᵢ(A) seam exactly.
+    θ_pin = [0.5]
+    A_pin = [1.0 0.0; 0.5 1.0]
+    m_pin = [Vector(η_rw' * A_pin[i, :]) for i in 1:n]
+    rf_const = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, m = m_pin,
+    )
+    prior_const = hamilton_structural_prior(rf_const, A_prior, Y_endog)
+    @test logpost_η(θ_pin) == structural_log_posterior(prior_const, est_p)(θ_pin)
+
+    # At A = I the η prior coincides with the random-walk prior; away from I
+    # the A-dependence must actually bite.
+    rf_rw = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true,
+    )
+    prior_rw = hamilton_structural_prior(rf_rw, A_prior, Y_endog)
+    logpost_rw = structural_log_posterior(prior_rw, est_p)
+    @test logpost_η([0.0]) == logpost_rw([0.0])
+    @test logpost_η(θ_pin) != logpost_rw(θ_pin)
+end
+
+@testset "η path is differentiable and samples under :rwmh" begin
+    n = length(end_vec_p)
+    k = n * lags_p + 1
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    rf_η = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_endog, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    prior_η = hamilton_structural_prior(rf_η, A_prior, Y_endog)
+    logpost = structural_log_posterior(prior_η, est_p)
+
+    # The mean's A-dependence must enter the gradient: check autodiff against
+    # a central finite difference (it would silently vanish if mᵢ were built
+    # from a Float-truncated aᵢ).
+    θ0 = [0.3]
+    grad = BayesianVectorAutoregressions.ForwardDiff.gradient(logpost, θ0)
+    @test all(isfinite, grad)
+    h = 1e-6
+    fd = (logpost([θ0[1] + h]) - logpost([θ0[1] - h])) / (2h)
+    @test grad[1] ≈ fd rtol = 1e-6
+
+    draws, diag =
+        sample_structural(prior_η, est_p; ndraws = 1000, rng = Xoshiro(7), method = :rwmh)
+    @test 0 < diag.acceptance_rate < 1
+    @test length(draws.A) == 1000
+end
+
+@testset "two-subsample μ = 0 collapses exactly to the second subsample" begin
+    n = length(end_vec_p)
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    lp12 = structural_log_posterior(prior, est1, est2; μ = 0.0)
+    lp2 = structural_log_posterior(prior, est2)
+    for θ in ([-0.5], [0.0], [0.7])
+        @test lp12(θ) == lp2(θ)
+    end
+
+    draws_12, diag_12 = sample_structural(
+        prior, est1, est2;
+        μ = 0.0, ndraws = 500, rng = Xoshiro(3), method = :mh,
+    )
+    draws_2, diag_2 =
+        sample_structural(prior, est2; ndraws = 500, rng = Xoshiro(3), method = :mh)
+    @test draws_12.A == draws_2.A
+    @test draws_12.B == draws_2.B
+    @test draws_12.D == draws_2.D
+    @test diag_12.acceptance_rate == diag_2.acceptance_rate
+end
+
+@testset "two-subsample μ = 1 with identical subsamples doubles the sample exactly" begin
+    gram = BayesianVectorAutoregressions.gram_blocks(est_p)
+    blocks = BayesianVectorAutoregressions.discounted_gram_blocks(est_p, est_p, 1.0)
+    @test blocks.Σ̂ == est_p.Σ
+    @test blocks.gram.XᵀX == 2 .* gram.XᵀX
+    @test blocks.gram.XᵀY == 2 .* gram.XᵀY
+    @test blocks.gram.YᵀY == 2 .* gram.YᵀY
+    @test blocks.obs == 2 * est_p.obs
+end
+
+@testset "discounted_gram_blocks implements the BH weighting at interior μ" begin
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    μ = 0.25
+    g1 = BayesianVectorAutoregressions.gram_blocks(est1)
+    g2 = BayesianVectorAutoregressions.gram_blocks(est2)
+    blocks = BayesianVectorAutoregressions.discounted_gram_blocks(est1, est2, μ)
+    @test blocks.gram.XᵀX ≈ μ .* g1.XᵀX .+ g2.XᵀX
+    @test blocks.gram.XᵀY ≈ μ .* g1.XᵀY .+ g2.XᵀY
+    @test blocks.gram.YᵀY ≈ μ .* g1.YᵀY .+ g2.YᵀY
+    @test blocks.obs == μ * est1.obs + est2.obs
+    # Ω̃ = (μζ₁ + ζ₂)/(μT₁ + T₂) with ζⱼ = Tⱼ·Σ̂ⱼ — the unnormalized form of
+    # main_BH_AER.m:224, written independently of the implementation's
+    # normalized weights.
+    Ω̃ = (μ * est1.obs .* est1.Σ .+ est2.obs .* est2.Σ) ./ (μ * est1.obs + est2.obs)
+    @test blocks.Σ̂ ≈ Ω̃
+end
+
+@testset "two-subsample sampling runs under every method" begin
+    n = length(end_vec_p)
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    draws_mh, diag_mh = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 500, rng = Xoshiro(5), method = :mh,
+    )
+    @test length(draws_mh.A) == 500
+    @test diag_mh.acceptance_rate > 0
+
+    draws_sir, diag_sir = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 500, rng = Xoshiro(5), method = :sir, oversample = 20,
+    )
+    @test length(draws_sir.A) == 500
+    @test diag_sir.ess > 0
+
+    draws_rw, diag_rw = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 500, rng = Xoshiro(5), method = :rwmh,
+    )
+    @test length(draws_rw.A) == 500
+    @test 0 < diag_rw.acceptance_rate < 1
+end
+
+@testset "two-subsample guardrails" begin
+    n = length(end_vec_p)
+    est1 = estimate_var(df_p[1:150, :], end_vec_p, lags_p)
+    est2 = estimate_var(df_p[100:300, :], end_vec_p, lags_p)
+    reduced_form = build_prior(df_p, end_vec_p, est_p, :hamilton_baumeister)
+    template = Matrix(1.0I, n, n)
+    free = falses(n, n)
+    free[2, 1] = true
+    component = Dict{Tuple{Int,Int},UnivariateDistribution}((2, 1) => Normal(0.0, 1.0))
+    A_prior = structural_prior(template, free, component; names = end_vec_p)
+    Y_endog = BayesianVectorAutoregressions.get_endogenous(df_p, end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_endog)
+
+    for bad_μ in (-0.1, 1.5, NaN)
+        @test_throws AssertionError sample_structural(
+            prior, est1, est2;
+            μ = bad_μ, ndraws = 10,
+        )
+        @test_throws AssertionError structural_log_posterior(
+            prior, est1, est2;
+            μ = bad_μ,
+        )
+    end
+
+    est1_lags = estimate_var(df_p[1:150, :], end_vec_p, 1)
+    @test_throws AssertionError sample_structural(prior, est1_lags, est2; μ = 0.5)
+    est1_nocon =
+        estimate_var(df_p[1:150, :], end_vec_p, lags_p; include_constant = false)
+    @test_throws AssertionError sample_structural(prior, est1_nocon, est2; μ = 0.5)
+    df_renamed = rename(df_p[1:150, :], :y1 => :a, :y2 => :b)
+    est1_names = estimate_var(df_renamed, [:a, :b], lags_p)
+    @test_throws AssertionError sample_structural(prior, est1_names, est2; μ = 0.5)
+    # Prior built for lags_p can't pair with two lag-1 estimates.
+    est2_lags = estimate_var(df_p[100:300, :], end_vec_p, 1)
+    @test_throws AssertionError sample_structural(prior, est1_lags, est2_lags; μ = 0.5)
+end
+
+@testset "BH-style two-subsample supply/demand block with η mean under :rwmh" begin
+    n = length(end_vec_p)
+    # BH build the prior — the σ̂ scales and Ŝ — from the first subsample only,
+    # then discount that subsample's likelihood; the windows overlap by `lags`
+    # rows so the second subsample's first regressands have initial conditions.
+    df_1 = df_p[1:180, :]
+    df_2 = df_p[(180 - lags_p):300, :]
+    est1 = estimate_var(df_1, end_vec_p, lags_p)
+    est2 = estimate_var(df_2, end_vec_p, lags_p)
+    Y_1 = BayesianVectorAutoregressions.get_endogenous(df_1, end_vec_p)
+    k = n * lags_p + 1
+    η_rw = zeros(n, k)
+    for i in 1:n
+        η_rw[i, 1 + i] = 1.0
+    end
+    reduced_form = BayesianVectorAutoregressions.baumeister_hamilton_prior(
+        Y_1, lags_p, end_vec_p, true; random_walk = false, η = η_rw,
+    )
+    θ_prior = UnivariateDistribution[
+        truncated(0.2 * TDist(3) + 0.1, 0.0, Inf),
+        truncated(0.2 * TDist(3) - 0.1, -Inf, 0.0),
+    ]
+    A_map = θ -> [1.0 -θ[1]; 1.0 -θ[2]]
+    A_prior = parametric_structural_prior(θ_prior, A_map, n; names = end_vec_p)
+    prior = hamilton_structural_prior(reduced_form, A_prior, Y_1)
+
+    draws, diag = sample_structural(
+        prior, est1, est2;
+        μ = 0.5, ndraws = 2000, rng = Xoshiro(21), method = :rwmh,
+    )
+    @test 0 < diag.acceptance_rate < 1
+    @test size(diag.θ) == (2000, 2)
+    @test all(diag.θ[:, 1] .>= 0.0)
+    @test all(diag.θ[:, 2] .<= 0.0)
+end
+
 @testset "det_sign_restriction and long_run_sign_restriction" begin
     A_pos = [1.0 0.0; 0.0 1.0]  # det = 1 > 0
     A_neg = [0.0 1.0; 1.0 0.0]  # det = -1 < 0

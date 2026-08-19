@@ -86,8 +86,13 @@ prior_minn.λ
 
 To fix them instead, pass both `hyperparameter_method = :fixed` and a `hyperparameters`
 `NamedTuple`. The expected keys are those of the corresponding `*_prior` function — `(λ1, λ2,
-λ3, λ4)` for `:minnesota` and `:independent_niw`, `(λ0, λ1, λ3, κ0, random_walk)` for
+λ3, λ4)` for `:minnesota` and `:independent_niw`, `(λ0, λ1, λ3, κ0, random_walk, m, η)` for
 `:hamilton_baumeister`. Passing `hyperparameters` without `:fixed` is an error.
+
+`m` (a constant prior mean per equation) and `η` (an ``A``-dependent prior mean, ``m_i(A) =
+\eta'a_i``) — see [Prior means on the structural lag coefficients](@ref) — are therefore only
+reachable under `hyperparameter_method = :fixed`: marginal-likelihood tuning only ever searches
+over `(λ0, λ1)`.
 
 ```@example priors
 prior_fixed = build_prior(
@@ -200,8 +205,9 @@ equation-specific shrinkage.
 
 | Field | Type | Meaning |
 |:--|:--|:--|
-| `m` | `Vector{Vector{T}}` | Prior mean per equation |
+| `m` | `Vector{Vector{T}}` | Prior mean per equation (its ``A = I`` value ``\eta'e_i`` when `η` is present) |
 | `M` | `Vector{Matrix{T}}` | Prior covariance per equation |
 | `κ` | `Vector{T}` | Gamma shape per equation |
 | `τ` | `Vector{T}` | Gamma rate per equation |
-| `structural` | `Bool` | `false` for the reduced form; `true` once extended to ``A \neq I`` by [`hamilton_structural_prior`](@ref) |
+| `η` | `Union{Nothing,Matrix{T}}` | `A`-dependent prior mean, ``m_i(A) = \eta'a_i`` (`nothing` when the mean is the constant `m`) |
+| `structural` | `Bool` | `true` iff `η` is present, i.e. the prior mean of the structural lag coefficients depends on ``A``; `false` when it is the constant `m` |
